@@ -1,0 +1,13 @@
+name: WorkbenchEvent
+version: 1.0.0
+authors: [FEST_Channel]
+
+description: Event plugin. Main plugin https://github.com/festino/hodgepodge
+
+main: com.festp.Main
+
+commands:
+         event:
+           description: W.
+           default: op
+api-version: 1.17
