@@ -48,6 +48,56 @@ public class CommandWorker implements CommandExecutor, TabCompleter {
 			double avg = metrics.getAverageTickSec();
 			sender.sendMessage(ChatColor.GREEN + "Base tickspeed: " + avg + "s (" + (avg * 20 * 100)+ "% of tick)");
 		}
+		if (args[0].equalsIgnoreCase("testspeed")) {
+			int N = Integer.parseInt(args[1]);
+			int x = 0, y = 0, z = 0;
+			long t1 = System.nanoTime();
+			for (int i = -N; i < N; i++)
+			{
+				int dir = i % 6;
+				if (dir < 0)
+					dir += 6;
+				int sign = (dir & 0x1) * 2 - 1;
+				x += sign * (1 - (((dir >> 1) & 0x1) & ((dir >> 2) & 0x1)));
+				y += sign * ((dir >> 1) & 0x1);
+				z += sign * ((dir >> 2) & 0x1);
+			}
+			long t2 = System.nanoTime();
+			double dt1 = (t2 - t1) / 1000000000.0;
+			sender.sendMessage(ChatColor.GREEN + "Time 1 (unbranched): " + dt1); // ~ 5.3s for N = 1000000000
+			t1 = System.nanoTime();
+			for (int i = -N; i < N; i++)
+			{
+				int dir = i % 6;
+				if (dir < 0)
+					dir += 6;
+				if (dir == 0)
+					x--;
+				else if (dir == 1)
+					x++;
+				else if (dir == 2)
+					y--;
+				else if (dir == 3)
+					y++;
+				else if (dir == 4)
+					z--;
+				else if (dir == 5)
+					z++;
+			}
+			t2 = System.nanoTime();
+			double dt2 = (t2 - t1) / 1000000000.0;
+			sender.sendMessage(ChatColor.GREEN + "Time 2 ( branched ): " + dt2); // ~ 3.4s for N = 1000000000
+			boolean found = false;
+			for (int i = -N; i < N; i++)
+			{
+				int dir = i % 6;
+				if (dir < 0) {
+					found = true;
+					break;
+				}
+			}
+			sender.sendMessage(ChatColor.GREEN + "Negative found " + found + ", x+y+z = " + (x + y + z));
+		}
 		if (args[0].equalsIgnoreCase("main")) {
 			if (args.length == 1) {
 				boolean enabled = phaser.isEnabled();
