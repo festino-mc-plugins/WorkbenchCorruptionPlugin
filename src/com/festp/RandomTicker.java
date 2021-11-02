@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.state.IBlockData;
 public class RandomTicker {
 	private final IBlockData WORKBENCH_DATA, BEDROCK_DATA;
 	private Random random;
+	private int rSeed;
 	//private int[] chunkTicks;
 	private int chunkTicks;
 	private int randomSectionTicks = 3;
@@ -28,6 +29,7 @@ public class RandomTicker {
 		//chunkTicks = new int[1]; // TODO remember all chunks
 		chunkTicks = 0;
 		random = new Random();
+		rSeed = random.nextInt();
 		WORKBENCH_DATA = CraftMagicNumbers.getBlock(Material.CRAFTING_TABLE, (byte) 0);
 		BEDROCK_DATA = CraftMagicNumbers.getBlock(Material.BEDROCK, (byte) 0);
 	}
@@ -38,7 +40,6 @@ public class RandomTicker {
 	}
 	
 	// use method #2 from https://www.spigotmc.org/threads/methods-for-changing-massive-amount-of-blocks-up-to-14m-blocks-s.395868/
-	@SuppressWarnings("deprecation")
 	public void tick()
 	{
 		for (World w : Bukkit.getWorlds())
@@ -58,39 +59,30 @@ public class RandomTicker {
 			for (Chunk c : w.getLoadedChunks())
 			{
 			    net.minecraft.world.level.chunk.Chunk nmsChunk = nmsWorld.getChunkAt(c.getX(), c.getZ());
-				for (int section = minY; section < maxY; section++)
+			    net.minecraft.world.level.chunk.ChunkSection[] chunksections = nmsChunk.getSections();
+				for (int sectionIndex = 0; sectionIndex < sectionHeight; sectionIndex++)
 				{
-					//if (c.isSectionEmpty(section))
-					//	continue;
+					net.minecraft.world.level.chunk.ChunkSection section = chunksections[sectionIndex];
+					if (section == null) // || !section.shouldTick()
+						continue;
 					
 					for (int i = 0; i < randomSectionTicks; i++)
 					{
-						int xyz = random.nextInt();
+						rSeed = rSeed * 3 + 1013904223; // https://github.com/Bukkit/mc-dev/blob/c1627dc9cc7505581993eb0fa15597cb36e94244/net/minecraft/server/WorldServer.java#L214
+						int xyz = rSeed >> 2;
 						int x = xyz & 0x0F;
-						xyz >>= 4;
+						xyz >>= 8;
 						int z = xyz & 0x0F;
-						xyz >>= 4;
+						xyz >>= 8;
 						int y = xyz & 0x0F;
-						xyz >>= 4;
-						y += 16 * section;
+						xyz >>= 8;
 						
-						BlockPosition bp = new BlockPosition(x, y, z);
-						//int mId = net.minecraft.world.level.block.Block.getCombinedId(nmsChunk.getType(bp)) & 0x0FFF;
-						//net.minecraft.world.level.material.Material m = nmsChunk.getType(bp).getMaterial();
-						IBlockData ibd = nmsChunk.getType(bp);
+						IBlockData ibd = section.getType(x, y, z);
 						
 						if (ibd == WORKBENCH_DATA)
 						{
-							// TODO improve code
-							int dir = xyz % 6;
-							if (dir < 0)
-								dir += 6;
-							
-							/*// 000, 001, 010, 011, 100, 101 - this implementation is slower
-							int sign = (dir & 0x1) * 2 - 1;
-							x += sign * (1 - (((dir >> 1) & 0x1) & ((dir >> 2) & 0x1)));
-							y += sign * ((dir >> 1) & 0x1);
-							z += sign * ((dir >> 2) & 0x1);*/
+							y += section.getYPosition();
+							int dir = random.nextInt(6);
 							
 							if (dir == 0)
 								x--;
@@ -124,7 +116,7 @@ public class RandomTicker {
 								}
 							}
 
-							bp = new BlockPosition(x, y, z);
+							BlockPosition bp = new BlockPosition(x, y, z);
 							ibd = nmsChunkTo.getType(bp);
 							
 							if (!ibd.isAir() && ibd != WORKBENCH_DATA && ibd != BEDROCK_DATA) {
