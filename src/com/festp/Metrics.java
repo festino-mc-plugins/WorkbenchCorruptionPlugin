@@ -1,7 +1,7 @@
 package com.festp;
 
 public class Metrics {
-	final int CONSIDERED_TICKS = 20 * 30;
+	final int CONSIDERED_TICKS = 20 * 10;
 	final double RATIO = 1.0f / 1000000000 / CONSIDERED_TICKS;
 	long[] metrics = new long[CONSIDERED_TICKS];
 	
