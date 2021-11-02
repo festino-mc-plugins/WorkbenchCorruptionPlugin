@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPosition;
 import net.minecraft.world.level.block.state.IBlockData;
 
 public class RandomTicker {
+	private final IBlockData WORKBENCH_DATA, BEDROCK_DATA;
 	private Random random;
 	//private int[] chunkTicks;
 	private int chunkTicks;
@@ -27,6 +28,8 @@ public class RandomTicker {
 		//chunkTicks = new int[1]; // TODO remember all chunks
 		chunkTicks = 0;
 		random = new Random();
+		WORKBENCH_DATA = CraftMagicNumbers.getBlock(Material.CRAFTING_TABLE, (byte) 0);
+		BEDROCK_DATA = CraftMagicNumbers.getBlock(Material.BEDROCK, (byte) 0);
 	}
 	
 	public void setRandomSectionTicks(int rts)
@@ -72,9 +75,11 @@ public class RandomTicker {
 						y += 16 * section;
 						
 						BlockPosition bp = new BlockPosition(x, y, z);
+						//int mId = net.minecraft.world.level.block.Block.getCombinedId(nmsChunk.getType(bp)) & 0x0FFF;
+						//net.minecraft.world.level.material.Material m = nmsChunk.getType(bp).getMaterial();
 						IBlockData ibd = nmsChunk.getType(bp);
-						Material m = CraftMagicNumbers.getMaterial(ibd).getItemType(); // Found at https://hub.spigotmc.org/stash/projects/SPIGOT/repos/craftbukkit/browse/src/main/java/org/bukkit/craftbukkit/block/data/CraftBlockData.java
-						if (m ==  Material.CRAFTING_TABLE) // TODO use nms crafting_table material
+						
+						if (ibd == WORKBENCH_DATA)
 						{
 							// TODO improve code
 							int dir = xyz % 6;
@@ -121,10 +126,9 @@ public class RandomTicker {
 
 							bp = new BlockPosition(x, y, z);
 							ibd = nmsChunkTo.getType(bp);
-							m = CraftMagicNumbers.getMaterial(ibd).getItemType();
-							Material toMaterial = CraftMagicNumbers.getMaterial(ibd).getItemType();
 							
-							if (!toMaterial.isAir() && toMaterial != Material.CRAFTING_TABLE && toMaterial != Material.BEDROCK) {
+							if (!ibd.isAir() && ibd != WORKBENCH_DATA && ibd != BEDROCK_DATA) {
+								//System.out.println(2 + " " + ibd + " " + (net.minecraft.world.level.block.Block.getCombinedId(ibd) >> 12));
 								Block to = w.getChunkAt(c.getX() + dx, c.getZ() + dz).getBlock(x, y, z);
 								to.setType(Material.CRAFTING_TABLE);
 							}
