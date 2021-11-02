@@ -46,7 +46,7 @@ public class CommandWorker implements CommandExecutor, TabCompleter {
 		}
 		if (args[0].equalsIgnoreCase("metrics")) {
 			double avg = metrics.getAverageTickSec();
-			sender.sendMessage(ChatColor.GREEN + "Base tickspeed: " + avg + "s (" + (avg * 20 * 100)+ "% of tick)");
+			sender.sendMessage(ChatColor.GREEN + "Base tickspeed: " + String.format("%.6f", avg) + "s (" + String.format("%.2f", avg * 20 * 100) + "% of tick)");
 		}
 		if (args[0].equalsIgnoreCase("testspeed")) {
 			int N = Integer.parseInt(args[1]);
