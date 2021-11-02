@@ -1,15 +1,19 @@
 package com.festp;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
-import org.bukkit.ChunkSnapshot;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.craftbukkit.v1_17_R1.CraftWorld; // TODO use reflection
+import org.bukkit.craftbukkit.v1_17_R1.util.CraftMagicNumbers;
+
+import net.minecraft.core.BlockPosition;
+import net.minecraft.world.level.block.state.IBlockData;
 
 public class RandomTicker {
 	private Random random;
@@ -17,7 +21,6 @@ public class RandomTicker {
 	private int chunkTicks;
 	private int randomSectionTicks = 3;
 	private int regularChunkTicks = 1;
-	Map<Integer, Map<Integer, ChunkSnapshot>> zMap = new HashMap<>();
 	
 	public RandomTicker()
 	{
@@ -31,6 +34,8 @@ public class RandomTicker {
 		randomSectionTicks = rts;
 	}
 	
+	// use method #2 from https://www.spigotmc.org/threads/methods-for-changing-massive-amount-of-blocks-up-to-14m-blocks-s.395868/
+	@SuppressWarnings("deprecation")
 	public void tick()
 	{
 		for (World w : Bukkit.getWorlds())
@@ -42,27 +47,18 @@ public class RandomTicker {
 			int sectionHeight = maxY - minY;
 			int times = chunkTicks / (16 * 16 * sectionHeight * 16);
 
-			// Chunk#getChunkSnapshot() IS TOO SLOW
-			//long t1 = System.nanoTime();
-			Chunk[] loadedChunks = w.getLoadedChunks();
-			for (Chunk cSlow : loadedChunks)
-			{
-				int chunkZ = cSlow.getZ();
-				if (!zMap.containsKey(chunkZ))
-					zMap.put(chunkZ, new HashMap<Integer, ChunkSnapshot>());
-				int chunkX = cSlow.getX();
-				zMap.get(chunkZ).put(chunkX, cSlow.getChunkSnapshot());
-			}
-			//long t2 = System.nanoTime();
-			//System.out.println((t2 - t1) / 1000000000.0);
+			Set<Long> loadedChunks = new HashSet<>();
+			for (Chunk c : w.getLoadedChunks())
+				loadedChunks.add(((long) c.getZ()) << 32 + c.getX());
 			
-			for (Chunk cSlow : loadedChunks)
+			net.minecraft.world.level.World nmsWorld = ((CraftWorld) w).getHandle();
+			for (Chunk c : w.getLoadedChunks())
 			{
-				ChunkSnapshot c = zMap.get(cSlow.getZ()).get(cSlow.getX());
+			    net.minecraft.world.level.chunk.Chunk nmsChunk = nmsWorld.getChunkAt(c.getX(), c.getZ());
 				for (int section = minY; section < maxY; section++)
 				{
-					if (c.isSectionEmpty(section))
-						continue;
+					//if (c.isSectionEmpty(section))
+					//	continue;
 					
 					for (int i = 0; i < randomSectionTicks; i++)
 					{
@@ -74,8 +70,11 @@ public class RandomTicker {
 						int y = xyz & 0x0F;
 						xyz >>= 4;
 						y += 16 * section;
-						Material m = c.getBlockType(x, y, z);
-						if (m == Material.CRAFTING_TABLE)
+						
+						BlockPosition bp = new BlockPosition(x, y, z);
+						IBlockData ibd = nmsChunk.getType(bp);
+						Material m = CraftMagicNumbers.getMaterial(ibd).getItemType(); // Found at https://hub.spigotmc.org/stash/projects/SPIGOT/repos/craftbukkit/browse/src/main/java/org/bukkit/craftbukkit/block/data/CraftBlockData.java
+						if (m ==  Material.CRAFTING_TABLE) // TODO use nms crafting_table material
 						{
 							// TODO improve code
 							int dir = xyz % 6;
@@ -104,34 +103,29 @@ public class RandomTicker {
 							if (y < minYblock || y >= maxYblock)
 								continue;
 
-							int dx = x >> 4;//(x - 15) / 16;
-							int dz = z >> 4;//(z - 15) / 16;
-							ChunkSnapshot c2;
+							int dx = x >> 4;
+							int dz = z >> 4;
+						    net.minecraft.world.level.chunk.Chunk nmsChunkTo;
 							if (dx == 0 && dz == 0) {
-								c2 = c;
+								nmsChunkTo = nmsChunk;
 							} else {
-								//if (x < 0 || z < 0)
-								//{
-								//	System.out.println(x + " " + z + " " + dx + " " + dz);
-								//}
-								if (zMap.containsKey(cSlow.getZ() + dz)) { // TODO use tuples as keys?
-									Map<Integer, ChunkSnapshot> xMap = zMap.get(cSlow.getZ() + dz);
-									if (xMap.containsKey(cSlow.getX() + dx)) {
-										c2 = xMap.get(cSlow.getX() + dx);
-										x -= dx * 16;
-										z -= dz * 16;
-									} else {
-										continue; // not loaded chunk
-									}
+								Long chunk = ((long) c.getZ() + dz) << 32 + c.getX() + dx;
+								if (loadedChunks.contains(chunk)) {
+									nmsChunkTo = nmsWorld.getChunkAt(c.getX() + dx, c.getZ() + dz);
+									x -= dx << 4;
+									z -= dz << 4;
 								} else {
-									continue; // not loaded chunk
+									continue;
 								}
 							}
 
-							Material toMaterial = c2.getBlockType(x, y, z);
+							bp = new BlockPosition(x, y, z);
+							ibd = nmsChunkTo.getType(bp);
+							m = CraftMagicNumbers.getMaterial(ibd).getItemType();
+							Material toMaterial = CraftMagicNumbers.getMaterial(ibd).getItemType();
 							
 							if (!toMaterial.isAir() && toMaterial != Material.CRAFTING_TABLE && toMaterial != Material.BEDROCK) {
-								Block to = w.getChunkAt(cSlow.getX() + dx, cSlow.getZ() + dz).getBlock(x, y, z);
+								Block to = w.getChunkAt(c.getX() + dx, c.getZ() + dz).getBlock(x, y, z);
 								to.setType(Material.CRAFTING_TABLE);
 							}
 						}
@@ -152,7 +146,7 @@ public class RandomTicker {
 					int xz = (hor * 55 + y * y + times % 17) % 256;
 					int x = xz % 16;
 					int z = xz / 16;
-					Block b = cSlow.getBlock(x, y, z);
+					Block b = c.getBlock(x, y, z);
 					if (b.getType() == Material.CRAFTING_TABLE)
 					{
 						int dir = random.nextInt() % 6;
@@ -184,7 +178,7 @@ public class RandomTicker {
 			}
 			
 			//System.out.println(w.getLoadedChunks().length + " " + zMap.size());
-			zMap.clear();
+			loadedChunks.clear();
 		}
 	}
 }
