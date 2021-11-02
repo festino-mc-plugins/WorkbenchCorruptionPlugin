@@ -12,7 +12,6 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.craftbukkit.v1_17_R1.CraftWorld; // TODO use reflection
 import org.bukkit.craftbukkit.v1_17_R1.util.CraftMagicNumbers;
-import org.bukkit.util.Vector;
 
 import net.minecraft.core.BlockPosition;
 import net.minecraft.world.level.block.state.IBlockData;
@@ -48,15 +47,48 @@ public class RandomTicker {
 		{
 			Set<Long> loadedChunks = new HashSet<>();
 			for (Chunk c : w.getLoadedChunks())
-				loadedChunks.add(((long) c.getZ()) << 32 + c.getX());
+				loadedChunks.add( (((long) c.getZ()) << 32) + c.getX());
 
-			ConcurrentLinkedQueue<Vector3i> blocksToGrow = new ConcurrentLinkedQueue<>();
-			ConcurrentLinkedQueue<Block> blocksToSet = new ConcurrentLinkedQueue<>();
-			net.minecraft.world.level.World nmsWorld = ((CraftWorld) w).getHandle();
+			final net.minecraft.world.level.World nmsWorld = ((CraftWorld) w).getHandle();
+			final ConcurrentLinkedQueue<net.minecraft.world.level.chunk.Chunk> queue = new ConcurrentLinkedQueue<>();
 			for (Chunk c : w.getLoadedChunks())
 			{
-				tickChunkRandomly(c, nmsWorld, blocksToGrow, blocksToSet); // TODO parallel
+				queue.add(nmsWorld.getChunkAt(c.getX(), c.getZ()));
 			}
+
+			ConcurrentLinkedQueue<Vector3i> blocksToGrow = new ConcurrentLinkedQueue<>();
+			ConcurrentLinkedQueue<Vector3i> blocksToSet = new ConcurrentLinkedQueue<>();
+			
+			Thread[] threads = new Thread[Runtime.getRuntime().availableProcessors()];
+			for (int i = 0; i < threads.length; i++)
+			{
+				threads[i] = new Thread(new Runnable() {
+					@Override
+					public void run() {
+						while (true)
+						{
+							net.minecraft.world.level.chunk.Chunk c = null;
+							synchronized(queue) {
+							    if(!queue.isEmpty()) {
+							        c = queue.poll();
+							    }
+							}
+							if (c == null)
+								break;
+							else
+								tickChunkRandomly(c, nmsWorld, blocksToGrow, blocksToSet);
+						}
+					}
+				});
+				threads[i].start();
+			}
+			for (int i = 0; i < threads.length; i++)
+				try {
+					threads[i].join();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			
 			/*for (Chunk c : w.getLoadedChunks())
 			{
 				tickChunkRegularly(c, nmsWorld);
@@ -65,30 +97,32 @@ public class RandomTicker {
 			while (!blocksToGrow.isEmpty())
 			{
 				Vector3i to = blocksToGrow.remove();
-				if (loadedChunks.contains(((long) to.z >> 4) << 32 + to.x >> 4))
+				if (loadedChunks.contains((((long) to.z >> 4) << 32) + (to.x >> 4)))
 				{
 					Block toBlock = w.getBlockAt(to.x, to.y, to.z);
 					Material toMaterial = toBlock.getType();
 					if (!toMaterial.isAir() && toMaterial != Material.CRAFTING_TABLE && toMaterial != Material.BEDROCK)
-						blocksToSet.add(toBlock);
+						blocksToSet.add(to);
 				}
 			}
 			
 			while (!blocksToSet.isEmpty())
 			{
-				Block to = blocksToSet.remove();
-				to.setType(Material.CRAFTING_TABLE);
+				Vector3i to = blocksToSet.remove();
+				Block toBlock = w.getBlockAt(to.x, to.y, to.z);
+				toBlock.setType(Material.CRAFTING_TABLE);
 			}
 			loadedChunks.clear();
 		}
 		chunkTicks++;
 	}
 	
-	private void tickChunkRandomly(Chunk c, net.minecraft.world.level.World nmsWorld,
-			ConcurrentLinkedQueue<Vector3i> blocksToGrow, ConcurrentLinkedQueue<Block> blocksToSet)
+	private void tickChunkRandomly(net.minecraft.world.level.chunk.Chunk nmsChunk, net.minecraft.world.level.World nmsWorld,
+			ConcurrentLinkedQueue<Vector3i> blocksToGrow, ConcurrentLinkedQueue<Vector3i> blocksToSet)
 	{
-	    net.minecraft.world.level.chunk.Chunk nmsChunk = nmsWorld.getChunkAt(c.getX(), c.getZ());
 	    net.minecraft.world.level.chunk.ChunkSection[] chunksections = nmsChunk.getSections();
+	    int baseZ = ((int) (nmsChunk.getPos().pair() >> 32)) << 4;
+	    int baseX = ((int) nmsChunk.getPos().pair()) << 4;
 		for (int sectionIndex = 0; sectionIndex < nmsWorld.getSectionsCount(); sectionIndex++)
 		{
 			net.minecraft.world.level.chunk.ChunkSection section = chunksections[sectionIndex];
@@ -97,7 +131,8 @@ public class RandomTicker {
 			
 			for (int i = 0; i < randomSectionTicks; i++)
 			{
-				rSeed = rSeed * 3 + 1013904223; // https://github.com/Bukkit/mc-dev/blob/c1627dc9cc7505581993eb0fa15597cb36e94244/net/minecraft/server/WorldServer.java#L214
+				// https://github.com/Bukkit/mc-dev/blob/c1627dc9cc7505581993eb0fa15597cb36e94244/net/minecraft/server/WorldServer.java#L214
+				rSeed = rSeed * 3 + 1013904223; // TODO synchronised?
 				int xyz = rSeed >> 2;
 				int x = xyz & 0x0F;
 				xyz >>= 8;
@@ -135,17 +170,7 @@ public class RandomTicker {
 					if (dx == 0 && dz == 0) {
 						nmsChunkTo = nmsChunk;
 					} else {
-						/*Long chunk = ((long) c.getZ() + dz) << 32 + c.getX() + dx;
-						if (loadedChunks.contains(chunk)) {
-							nmsChunkTo = nmsWorld.getChunkAt(c.getX() + dx, c.getZ() + dz);
-							x -= dx << 4;
-							z -= dz << 4;
-						} else {
-							continue;
-						}*/
-						x -= dx << 4;
-						z -= dz << 4;
-						blocksToGrow.add(new Vector3i(x , y, z));
+						blocksToGrow.add(new Vector3i(baseX + x, y, baseZ + z));
 						continue;
 					}
 
@@ -155,7 +180,8 @@ public class RandomTicker {
 					if (!ibd.isAir() && ibd != WORKBENCH_DATA && ibd != BEDROCK_DATA) {
 						//System.out.println(2 + " " + ibd + " " + (net.minecraft.world.level.block.Block.getCombinedId(ibd) >> 12));
 						/*Block to = w.getChunkAt(c.getX() + dx, c.getZ() + dz).getBlock(x, y, z);*/
-						blocksToSet.add(c.getBlock(x, y, z));
+						//System.out.println(baseX + " " + baseZ + " " + nmsChunkTo);
+						blocksToSet.add(new Vector3i(baseX + x, y, baseZ + z));
 					}
 				}
 			}
@@ -182,9 +208,7 @@ public class RandomTicker {
 			Block b = c.getBlock(x, y, z);
 			if (b.getType() == Material.CRAFTING_TABLE)
 			{
-				int dir = random.nextInt() % 6;
-				if (dir < 0)
-					dir += 6;
+				int dir = random.nextInt(6);
 				
 				Block to = null;
 				if (dir == 0)
