@@ -1,9 +1,8 @@
 package com.festp;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Random;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -39,6 +38,7 @@ public class RandomTicker {
 	}
 	
 	// use method #2 from https://www.spigotmc.org/threads/methods-for-changing-massive-amount-of-blocks-up-to-14m-blocks-s.395868/
+	@SuppressWarnings("deprecation")
 	public void tick()
 	{
 		for (World w : Bukkit.getWorlds())
@@ -50,18 +50,14 @@ public class RandomTicker {
 			int sectionHeight = maxY - minY;
 			int times = chunkTicks / (16 * 16 * sectionHeight * 16);
 
-			net.minecraft.world.level.World nmsWorld = ((CraftWorld) w).getHandle();
-			Map<Long, net.minecraft.world.level.chunk.Chunk> loadedChunks = new HashMap<>();
-			Chunk[] chunks = w.getLoadedChunks();
-			for (Chunk c : chunks) {
-				long key = ((long) c.getZ()) << 32 + c.getX();
-				loadedChunks.put(key, nmsWorld.getChunkAt(c.getX(), c.getZ()));
-			}
+			Set<Long> loadedChunks = new HashSet<>();
+			for (Chunk c : w.getLoadedChunks())
+				loadedChunks.add(((long) c.getZ()) << 32 + c.getX());
 			
-			for (Chunk c : chunks)
+			net.minecraft.world.level.World nmsWorld = ((CraftWorld) w).getHandle();
+			for (Chunk c : w.getLoadedChunks())
 			{
-				long key = ((long) c.getZ()) << 32 + c.getX();
-			    net.minecraft.world.level.chunk.Chunk nmsChunk = loadedChunks.get(key);
+			    net.minecraft.world.level.chunk.Chunk nmsChunk = nmsWorld.getChunkAt(c.getX(), c.getZ());
 				for (int section = minY; section < maxY; section++)
 				{
 					//if (c.isSectionEmpty(section))
@@ -118,9 +114,9 @@ public class RandomTicker {
 							if (dx == 0 && dz == 0) {
 								nmsChunkTo = nmsChunk;
 							} else {
-								long keyTo = ((long) c.getZ() + dz) << 32 + c.getX() + dx;
-								if (loadedChunks.containsKey(keyTo)) {
-									nmsChunkTo = loadedChunks.get(keyTo);
+								Long chunk = ((long) c.getZ() + dz) << 32 + c.getX() + dx;
+								if (loadedChunks.contains(chunk)) {
+									nmsChunkTo = nmsWorld.getChunkAt(c.getX() + dx, c.getZ() + dz);
 									x -= dx << 4;
 									z -= dz << 4;
 								} else {
