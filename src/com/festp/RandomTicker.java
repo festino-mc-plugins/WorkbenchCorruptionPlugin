@@ -41,7 +41,11 @@ public class RandomTicker {
 			int maxY = maxYblock / 16;
 			int sectionHeight = maxY - minY;
 			int times = chunkTicks / (16 * 16 * sectionHeight * 16);
-			for (Chunk cSlow : w.getLoadedChunks())
+
+			// Chunk#getChunkSnapshot() IS TOO SLOW
+			//long t1 = System.nanoTime();
+			Chunk[] loadedChunks = w.getLoadedChunks();
+			for (Chunk cSlow : loadedChunks)
 			{
 				int chunkZ = cSlow.getZ();
 				if (!zMap.containsKey(chunkZ))
@@ -49,8 +53,10 @@ public class RandomTicker {
 				int chunkX = cSlow.getX();
 				zMap.get(chunkZ).put(chunkX, cSlow.getChunkSnapshot());
 			}
+			//long t2 = System.nanoTime();
+			//System.out.println((t2 - t1) / 1000000000.0);
 			
-			for (Chunk cSlow : w.getLoadedChunks())
+			for (Chunk cSlow : loadedChunks)
 			{
 				ChunkSnapshot c = zMap.get(cSlow.getZ()).get(cSlow.getX());
 				for (int section = minY; section < maxY; section++)
@@ -168,14 +174,16 @@ public class RandomTicker {
 							to = b.getRelative(1, 0, 0);
 						
 						// if "to" is not loaded
-						
-						if (!to.getType().isAir())
+
+						Material toMaterial = to.getType();
+						if (!toMaterial.isAir() && toMaterial != Material.CRAFTING_TABLE && toMaterial != Material.BEDROCK)
 							to.setType(Material.CRAFTING_TABLE);
 					}
 					chunkTicks++;
 				}
 			}
 			
+			//System.out.println(w.getLoadedChunks().length + " " + zMap.size());
 			zMap.clear();
 		}
 	}
