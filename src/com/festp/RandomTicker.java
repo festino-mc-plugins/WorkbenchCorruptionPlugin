@@ -26,6 +26,8 @@ public class RandomTicker {
 	private int randomSectionTicks = 3;
 	private int regularChunkTicks = 1;
 	
+	private boolean isGrowing = false, isMoving = false;
+	
 	public RandomTicker()
 	{
 		//chunkTicks = new int[1]; // TODO remember all chunks
@@ -39,6 +41,12 @@ public class RandomTicker {
 	public void setRandomSectionTicks(int rts)
 	{
 		randomSectionTicks = rts;
+	}
+	
+	public void setFeatures(boolean isGrowing, boolean isMoving)
+	{
+		this.isGrowing = isGrowing;
+		this.isMoving = isMoving;
 	}
 	
 	// use method #2 from https://www.spigotmc.org/threads/methods-for-changing-massive-amount-of-blocks-up-to-14m-blocks-s.395868/
@@ -62,6 +70,7 @@ public class RandomTicker {
 
 			ConcurrentLinkedQueue<Vector3i> blocksToGrow = new ConcurrentLinkedQueue<>();
 			ConcurrentLinkedQueue<Vector3i> blocksToSet = new ConcurrentLinkedQueue<>();
+			ConcurrentLinkedQueue<Vector3i[]> targetsSources = new ConcurrentLinkedQueue<>();
 			
 			Thread[] threads = new Thread[Runtime.getRuntime().availableProcessors()];
 			for (int i = 0; i < threads.length; i++)
@@ -80,7 +89,7 @@ public class RandomTicker {
 							if (c == null)
 								break;
 							else
-								tickChunkRandomly(c, nmsWorld, blocksToGrow, blocksToSet);
+								tickChunkRandomly(c, nmsWorld, blocksToGrow, blocksToSet, targetsSources);
 						}
 					}
 				});
@@ -97,6 +106,73 @@ public class RandomTicker {
 			{
 				tickChunkRegularly(c, nmsWorld);
 			}*/
+			
+			while (!targetsSources.isEmpty())
+			{
+				/*	move:
+				under target => skip, else try x or z(probs depends on x/z): (block unavailable => up: unavailable => stop)
+				no near blocks(3x3 \ corners) => stop, else move*/
+				Vector3i[] targetSource = targetsSources.remove();
+				Vector3i target = targetSource[0];
+				Vector3i source = targetSource[1];
+				final int TOTAL_MOVES = 16;
+				for (int m = 0; m < TOTAL_MOVES; m++)
+				{
+					int rx = random.nextInt(16) - random.nextInt(16);
+					int rz = random.nextInt(16) - random.nextInt(16);
+					if (rx != 0 || rz != 0)
+					{
+						int ry = random.nextInt(16) - random.nextInt(16);
+						if (source.y + ry < 0)
+							continue;
+						int x = source.x + rx;
+						int z = source.z + rz;
+						Block b = w.getBlockAt(x, source.y + ry, z);
+						if (b.getType() == Material.CRAFTING_TABLE)
+						{
+							int absX = Math.abs(rx);
+							int absZ = Math.abs(rz);
+							int d = absX + absZ;
+							int dx, dz;
+							if (random.nextInt(d) < absX) {
+								dx = -rx / absX;
+								dz = 0;
+							} else {
+								dx = 0;
+								dz = -rz / absZ;
+							}
+							Block to = b.getRelative(dx, 0, dz);
+							if (!to.getType().isAir()) {
+								to = b.getRelative(0, 1, 0);
+								if (!to.getType().isAir()) {
+									continue;
+								}
+							}
+							boolean found = false;
+							for (int checkDx = -1; checkDx <= 1; checkDx++)
+								for (int checkDy = -1; checkDy <= 1; checkDy++)
+									for (int checkDz = -1; checkDz <= 1; checkDz++)
+									{
+										if (checkDx * checkDy * checkDz == 0 && (checkDx | checkDy | checkDz) != 0)
+										{
+											Block check = to.getRelative(checkDx, checkDy, checkDz);
+											if (check != b && check.getType() == Material.CRAFTING_TABLE)
+											{
+												found = true;
+												break;
+											}
+										}
+									}
+							if (found)
+							{
+								//System.out.println("Move " + b + " to " + to);
+								b.setType(Material.AIR);
+								to.setType(Material.CRAFTING_TABLE);
+							}
+						}
+					}
+				}
+			}
 
 			while (!blocksToGrow.isEmpty())
 			{
@@ -122,7 +198,7 @@ public class RandomTicker {
 	}
 	
 	private void tickChunkRandomly(net.minecraft.world.level.chunk.Chunk nmsChunk, net.minecraft.world.level.World nmsWorld,
-			ConcurrentLinkedQueue<Vector3i> blocksToGrow, ConcurrentLinkedQueue<Vector3i> blocksToSet)
+			ConcurrentLinkedQueue<Vector3i> blocksToGrow, ConcurrentLinkedQueue<Vector3i> blocksToSet, ConcurrentLinkedQueue<Vector3i[]> targetsSources)
 	{
 	    net.minecraft.world.level.chunk.ChunkSection[] chunksections = nmsChunk.getSections();
 	    int baseZ = ((int) (nmsChunk.getPos().pair() >> 32)) << 4;
@@ -149,6 +225,9 @@ public class RandomTicker {
 				
 				if (ibd == WORKBENCH_DATA)
 				{
+					if (!isGrowing)
+						continue;
+					
 					y += section.getYPosition();
 					int dir = random.nextInt(6);
 					
@@ -182,11 +261,41 @@ public class RandomTicker {
 					ibd = nmsChunkTo.getType(bp);
 					
 					if (!ibd.isAir() && ibd != WORKBENCH_DATA && ibd != BEDROCK_DATA) {
-						//System.out.println(2 + " " + ibd + " " + (net.minecraft.world.level.block.Block.getCombinedId(ibd) >> 12));
-						/*Block to = w.getChunkAt(c.getX() + dx, c.getZ() + dz).getBlock(x, y, z);*/
 						//System.out.println(baseX + " " + baseZ + " " + nmsChunkTo);
 						blocksToSet.add(new Vector3i(baseX + x, y, baseZ + z));
 					}
+				}
+				else if (isMoving && ibd != BEDROCK_DATA && !ibd.isAir())
+				{
+					y += section.getYPosition();
+					// check no workbenches nearby
+					boolean foundWorkbench = false;
+					while (true)
+					{
+						if (y <= 0)
+							break;
+						y--;
+						BlockPosition bp = new BlockPosition(x, y, z);
+						ibd = nmsChunk.getType(bp);
+						if (ibd.isAir() || ibd == BEDROCK_DATA)
+							break;
+						if (ibd == WORKBENCH_DATA) {
+							foundWorkbench = true;
+							break;
+						}
+					}
+					if (foundWorkbench)
+						continue;
+					
+					Vector3i target = new Vector3i(baseX + x, y, baseZ + z);
+					while (ibd.isAir() && y > 0)
+					{
+						y--;
+						BlockPosition bp = new BlockPosition(x, y, z);
+						ibd = nmsChunk.getType(bp);
+					}
+					
+					targetsSources.add(new Vector3i[] { target, new Vector3i(baseX + x, y, baseZ + z)});
 				}
 			}
 		}

@@ -9,6 +9,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
@@ -75,16 +77,10 @@ public class Phaser implements Listener {
 		tickSupply += actual;
 		int ticks = (int)Math.floor(tickSupply);
 		tickSupply -= ticks;
-		if (features.containsKey(PhaseFeature.GROWTH))
+		if (features.containsKey(PhaseFeature.GROWTH) || features.containsKey(PhaseFeature.HUNT_STRETCHING))
 		{
-			/* TODO
-				target:
-			on random tick: if no WB(can grow to), check nearest: no workbenches => move down, checking(WB => stop): not growable => move through air
-			=> try move WB(s) (randomInt - randomInt?)
-				move:
-			under target => skip, else try x or z(probs depends on x/z): (block unavailable => up: unavailable => stop)
-			no near blocks(3x3 \ corners) => stop, else move*/
 			randomTicker.setRandomSectionTicks(ticks);
+			randomTicker.setFeatures(features.containsKey(PhaseFeature.GROWTH), features.containsKey(PhaseFeature.HUNT_STRETCHING));
 			if (ticks > 0)
 				randomTicker.tick();
 		}
@@ -211,7 +207,8 @@ public class Phaser implements Listener {
 			{
 				Enderman e = l.getWorld().spawn(l, Enderman.class, (enderman) -> {
 		 			enderman.setCarriedMaterial(new ItemStack(Material.CRAFTING_TABLE).getData());
-		        }); 
+		        });
+				l.getWorld().playSound(l, Sound.ENTITY_ENDERMAN_TELEPORT, SoundCategory.HOSTILE, 3.0f, 1.0f);
 				endermen.add(e);
 				return true;
 			}
