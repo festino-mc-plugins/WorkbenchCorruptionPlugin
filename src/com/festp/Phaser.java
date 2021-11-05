@@ -1,20 +1,50 @@
 package com.festp;
 
-public class Phaser {
-	private boolean enabled = false;
-	double baseTickspeed = 3;
-	
-	int phase = 0;
-	Phase[] phases = new Phase[1];
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-	long phaseTicks = 0;
-	double tickSupply = 0;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.World;
+import org.bukkit.World.Environment;
+import org.bukkit.block.Block;
+import org.bukkit.entity.Enderman;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.world.ChunkPopulateEvent;
+import org.bukkit.inventory.ItemStack;
+
+public class Phaser implements Listener {
+	private static final int ENDERMAN_MAX_COUNT = 32;
+	private static final int ENDERMAN_MAX_ATTEMPTS = 16;
+	private static final int ENDERMAN_DIST_MIN = 2 * 16;
+	private static final int ENDERMAN_DIST_MAX = 8 * 16;
+	private static final int ENDERMAN_DIST_DESPAWN = 6 * 16;
 	
-	public final RandomTicker randomTicker = new RandomTicker();
+	private boolean enabled = false;
+	Random random = new Random();
+	List<Enderman> endermen = new ArrayList<>();
+	
+	double baseTickspeed = 3;
+	double tickSupply = 0;
+	RandomTicker randomTicker = new RandomTicker();
+
+	Phase[] phases;
+	long phaseTicks = 0;
+	int phaseIndex = 0;
+	Phase currentPhase = null;
+	EnumMap<PhaseFeature, Boolean> features;
+	
+	ConcurrentLinkedQueue<ChunkInfo> newChunks = new ConcurrentLinkedQueue<>();
 	
 	public Phaser(Phase[] phases)
 	{
-		this.phases = phases;
+		setPhases(phases);
 	}
 	
 	public void setPhases(Phase[] phases)
@@ -27,34 +57,120 @@ public class Phaser {
 	{
 		if (index < 0 || phases.length <= index)
 			return false;
-		phase = index;
-		phaseTicks = (int)Math.floor(phases[phase].getDuration() * timePercent);
+		phaseIndex = index;
+		currentPhase = phases[phaseIndex];
+		features = currentPhase.getFeatures();
+		phaseTicks = (int)Math.floor(currentPhase.getDuration() * timePercent);
 		return true;
 	}
 	
 	public void tick()
 	{
+		if (!enabled)
+			return;
+		
+		populateNewChunks(2);
+		
 		double actual = getActualTickspeed();
 		tickSupply += actual;
 		int ticks = (int)Math.floor(tickSupply);
 		tickSupply -= ticks;
-		randomTicker.setRandomSectionTicks(ticks);
-		if (ticks > 0)
+		if (features.containsKey(PhaseFeature.GROWTH))
 		{
-			randomTicker.tick();
+			/* TODO
+				target:
+			on random tick: if no WB(can grow to), check nearest: no workbenches => move down, checking(WB => stop): not growable => move through air
+			=> try move WB(s) (randomInt - randomInt?)
+				move:
+			under target => skip, else try x or z(probs depends on x/z): (block unavailable => up: unavailable => stop)
+			no near blocks(3x3 \ corners) => stop, else move*/
+			randomTicker.setRandomSectionTicks(ticks);
+			if (ticks > 0)
+				randomTicker.tick();
 		}
 		
+		if (features.containsKey(PhaseFeature.ENDERMAN))
+		{
+			if (random.nextInt(16) == 0)
+			{
+				for (int i = endermen.size() - 1; i >= 0; i--)
+				{
+					if (!endermen.get(i).isValid())
+						endermen.remove(i);
+				}
+				if (endermen.size() < ENDERMAN_MAX_COUNT)
+				{
+					// try to spawn near random player (2-8 chunks)
+					// on any solid block(light?)
+					Player[] players = new Player[Bukkit.getOnlinePlayers().size()];
+					if (players.length > 0)
+					{
+						int i = 0;
+						for (Player p : Bukkit.getOnlinePlayers())
+						{
+							players[i] = p;
+							i++;
+						}
+						Player player = players[random.nextInt(players.length)];
+						Location playerLoc = player.getLocation();
+						if (playerLoc.getWorld().getEnvironment() != Environment.THE_END)
+						{
+							for (int j = 0; j < ENDERMAN_MAX_ATTEMPTS; j++)
+								if (trySpawnEnderman(playerLoc))
+									break;
+						}
+					}
+				}
+				else
+				{
+					Enderman e = endermen.get(0);
+					double minDist = ENDERMAN_DIST_MAX;
+					for (Player p : e.getWorld().getPlayers()) {
+						double dist = e.getLocation().distance(p.getLocation());
+						if (minDist > dist)
+							minDist = dist;
+					}
+					if (minDist > ENDERMAN_DIST_DESPAWN)
+						e.remove();
+				}
+			}
+		}
+
+		if (features.containsKey(PhaseFeature.REPLACE_MOB))
+		{
+			// TODO
+			if (random.nextInt(16) == 0)
+			{
+				// get mob(s)
+				// check item slot(including containers like donkey)
+				// choose item slot
+				// check workbench touching
+				// replace
+			}
+		}
+		if (features.containsKey(PhaseFeature.REPLACE_PLAYER))
+		{
+			if (random.nextInt(16) == 0)
+			{
+				// get player
+				// check delay???
+				// choose item slot
+				// check workbench touching
+				// replace
+			}
+		}
+		
+			
 		phaseTicks++;
-		if (phaseTicks > phases[phase].getDuration())
+		if (phaseTicks > currentPhase.getDuration())
 		{
 			phaseTicks = 0;
-			if (phase < phases.length - 1)
-				phase++;
+			setPhase(phaseIndex + 1, 0);
 		}
 		
 		// TODO save state
 	}
-	
+
 	public void setEnabled(boolean isEnabled)
 	{
 		enabled = isEnabled;
@@ -73,11 +189,81 @@ public class Phaser {
 	{
 		if (!enabled)
 			return 0;
-		return baseTickspeed * phases[phase].getSpeedMultiplier(phaseTicks);
+		return baseTickspeed * currentPhase.getSpeedMultiplier(phaseTicks);
 	}
 	
 	public void setBaseTickspeed(double tickspeed)
 	{
 		baseTickspeed = tickspeed;
+	}
+	
+	private boolean trySpawnEnderman(Location center) {
+		int dx = random.nextInt(2 * ENDERMAN_DIST_MAX + 1) - ENDERMAN_DIST_MAX;
+		int dy = random.nextInt(2 * ENDERMAN_DIST_MAX + 1) - ENDERMAN_DIST_MAX;
+		int dz = random.nextInt(2 * ENDERMAN_DIST_MAX + 1) - ENDERMAN_DIST_MAX;
+		if (Math.abs(dx) > ENDERMAN_DIST_MIN && Math.abs(dy) > ENDERMAN_DIST_MIN && Math.abs(dz) > ENDERMAN_DIST_MIN)
+		{
+			Location l = center.add(dx, dy, dz);
+			Block b = l.getBlock();
+			l = b.getLocation().add(0.5, 0, 0.5);
+			if (b.isPassable() && b.getRelative(0, -1, 0).getType().isSolid()
+					&& b.getRelative(0, 1, 0).isPassable() && b.getRelative(0, 2, 0).isPassable())
+			{
+				Enderman e = l.getWorld().spawn(l, Enderman.class, (enderman) -> {
+		 			enderman.setCarriedMaterial(new ItemStack(Material.CRAFTING_TABLE).getData());
+		        }); 
+				endermen.add(e);
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	@EventHandler
+	public void onChunkPopulated(ChunkPopulateEvent event)
+	{
+		if (!features.containsKey(PhaseFeature.CHUNK_PREINFECTION))
+			return;
+		
+		newChunks.add(new ChunkInfo(event.getChunk()));
+	}
+	
+	private void populateNewChunks(int count)
+	{
+		for (int i = 0; i < count; i++)
+		{
+			if (newChunks.isEmpty())
+				break;
+			ChunkInfo chunk = newChunks.remove();
+			World world = chunk.getWorld();
+			int minX = chunk.getX() << 4;
+			int minZ = chunk.getZ() << 4;
+			int maxX = minX + 16;
+			int maxZ = minZ + 16;
+			for (int x = minX; x < maxX; x++) {
+				for (int z = minZ; z < maxZ; z++) {
+					Block b = world.getHighestBlockAt(x, z);
+					Block b1 = b.getRelative(0, 1, 0);
+					while (!b1.getType().isAir()) {
+						b = b1;
+						b1 = b1.getRelative(0, 1, 0);
+					}
+					b.setType(Material.CRAFTING_TABLE, false);
+					b = b.getRelative(0, -1, 0);
+					if (!b.getType().isAir())
+						b.setType(Material.CRAFTING_TABLE, false); // depth == 2
+					//if (x % 4 == 1 && z % 4 == 1) // may be use chunk x and z to "random"
+					if ((3 * x + z) % 17 == 0)
+					{
+						for (int y = b.getY() - 4; y >= 6; y -= 4)
+						{
+							b = b.getRelative(0, -4, 0);
+							if (!b.getType().isAir())
+								b.setType(Material.CRAFTING_TABLE, false);
+						}
+					}
+				}
+			}
+		}
 	}
 }
