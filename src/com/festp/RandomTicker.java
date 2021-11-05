@@ -9,6 +9,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
 import org.bukkit.craftbukkit.v1_17_R1.CraftWorld; // TODO use reflection
 import org.bukkit.craftbukkit.v1_17_R1.util.CraftMagicNumbers;
@@ -45,6 +46,9 @@ public class RandomTicker {
 	{
 		for (World w : Bukkit.getWorlds())
 		{
+			if (w.getEnvironment() == Environment.THE_END /*&& isEndDisabled*/)
+				continue;
+			
 			Set<Long> loadedChunks = new HashSet<>();
 			for (Chunk c : w.getLoadedChunks())
 				loadedChunks.add( (((long) c.getZ()) << 32) + c.getX());
