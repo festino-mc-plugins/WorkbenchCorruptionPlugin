@@ -12,11 +12,23 @@ public class Main extends JavaPlugin implements Listener
 	private static final String SEP = System.getProperty("file.separator");
 	public static final String PATH = "plugins" + SEP + "WorkbenchCorruption" + SEP;
 
-	final Phaser phaser = new Phaser(new Phase[] { new LinearPhase(72000, 1.0, 1.0) });
+	PhaseFeature[] features0 = new PhaseFeature[] {PhaseFeature.ENDERMAN};
+	PhaseFeature[] features1 = new PhaseFeature[] {PhaseFeature.GROWTH};
+	PhaseFeature[] features2 = new PhaseFeature[] {PhaseFeature.GROWTH, PhaseFeature.ENDERMAN, PhaseFeature.REPLACE_MOB, PhaseFeature.CHUNK_PREINFECTION};
+	PhaseFeature[] features3 = new PhaseFeature[] {PhaseFeature.GROWTH, PhaseFeature.ENDERMAN, PhaseFeature.REPLACE_MOB, PhaseFeature.CHUNK_PREINFECTION,
+			PhaseFeature.REPLACE_PLAYER, PhaseFeature.HUNT_STRETCHING, PhaseFeature.INFECT_PLAYER, PhaseFeature.EXECUTE_PLAYER};
+	Phase phase0 = new LinearPhase(features0, Integer.MAX_VALUE, 0.0, 0.0);
+	Phase phase1 = new LinearPhase(features1, 24 * 60 * 60 * 20, 3.0, 50.0);
+	Phase phase2 = new LinearPhase(features1, 24 * 60 * 60 * 20, 50.0, 50.0);
+	Phase phase3 = new LinearPhase(features2, 2 * 24 * 60 * 60 * 20, 50.0, 50.0);
+	Phase phase4 = new LinearPhase(features3, 2 * 24 * 60 * 60 * 20, 50.0, 50.0);
+	Phase[] phases = new Phase[] { phase0, phase1, phase2, phase3, phase4 };
+	final Phaser phaser = new Phaser(phases);
 	final Metrics metrics = new Metrics();
 	
 	public void onEnable() {
 		getServer().getPluginManager().registerEvents(this, this);
+		getServer().getPluginManager().registerEvents(phaser, this);
 		
     	CommandWorker command_worker = new CommandWorker(phaser, metrics);
     	getCommand(CommandWorker.MAIN_COMMAND).setExecutor(command_worker);
