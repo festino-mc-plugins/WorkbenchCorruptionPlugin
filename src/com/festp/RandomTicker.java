@@ -1,7 +1,9 @@
 package com.festp;
 
 import java.util.Random;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -25,6 +27,8 @@ public class RandomTicker {
 	private int chunkTicks;
 	private int randomSectionTicks = 3;
 	private int regularChunkTicks = 1;
+
+	List<StretchTarget> targets = new ArrayList<>();
 	
 	private boolean isGrowing = false, isMoving = false;
 	
@@ -56,149 +60,165 @@ public class RandomTicker {
 		{
 			if (w.getEnvironment() == Environment.THE_END /*&& isEndDisabled*/)
 				continue;
-			
+
 			Set<Long> loadedChunks = new HashSet<>();
 			for (Chunk c : w.getLoadedChunks())
 				loadedChunks.add( (((long) c.getZ()) << 32) + c.getX());
+			
+			if (isGrowing)
+				growWorld(w, loadedChunks);
 
-			final net.minecraft.world.level.World nmsWorld = ((CraftWorld) w).getHandle();
-			final ConcurrentLinkedQueue<net.minecraft.world.level.chunk.Chunk> queue = new ConcurrentLinkedQueue<>();
-			for (Chunk c : w.getLoadedChunks())
-			{
-				queue.add(nmsWorld.getChunkAt(c.getX(), c.getZ()));
-			}
-
-			ConcurrentLinkedQueue<Vector3i> blocksToGrow = new ConcurrentLinkedQueue<>();
-			ConcurrentLinkedQueue<Vector3i> blocksToSet = new ConcurrentLinkedQueue<>();
-			ConcurrentLinkedQueue<Vector3i[]> targetsSources = new ConcurrentLinkedQueue<>();
-			
-			Thread[] threads = new Thread[Runtime.getRuntime().availableProcessors()];
-			for (int i = 0; i < threads.length; i++)
-			{
-				threads[i] = new Thread(new Runnable() {
-					@Override
-					public void run() {
-						while (true)
-						{
-							net.minecraft.world.level.chunk.Chunk c = null;
-							synchronized(queue) {
-							    if(!queue.isEmpty()) {
-							        c = queue.poll();
-							    }
-							}
-							if (c == null)
-								break;
-							else
-								tickChunkRandomly(c, nmsWorld, blocksToGrow, blocksToSet, targetsSources);
-						}
-					}
-				});
-				threads[i].start();
-			}
-			for (int i = 0; i < threads.length; i++)
-				try {
-					threads[i].join();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			
-			/*for (Chunk c : w.getLoadedChunks())
-			{
-				tickChunkRegularly(c, nmsWorld);
-			}*/
-			
-			while (!targetsSources.isEmpty())
-			{
-				/*	move:
-				under target => skip, else try x or z(probs depends on x/z): (block unavailable => up: unavailable => stop)
-				no near blocks(3x3 \ corners) => stop, else move*/
-				Vector3i[] targetSource = targetsSources.remove();
-				Vector3i target = targetSource[0];
-				Vector3i source = targetSource[1];
-				final int TOTAL_MOVES = 16;
-				for (int m = 0; m < TOTAL_MOVES; m++)
-				{
-					int rx = random.nextInt(16) - random.nextInt(16);
-					int rz = random.nextInt(16) - random.nextInt(16);
-					if (rx != 0 || rz != 0)
-					{
-						int ry = random.nextInt(16) - random.nextInt(16);
-						if (source.y + ry < 0)
-							continue;
-						int x = source.x + rx;
-						int z = source.z + rz;
-						Block b = w.getBlockAt(x, source.y + ry, z);
-						if (b.getType() == Material.CRAFTING_TABLE)
-						{
-							int absX = Math.abs(rx);
-							int absZ = Math.abs(rz);
-							int d = absX + absZ;
-							int dx, dz;
-							if (random.nextInt(d) < absX) {
-								dx = -rx / absX;
-								dz = 0;
-							} else {
-								dx = 0;
-								dz = -rz / absZ;
-							}
-							Block to = b.getRelative(dx, 0, dz);
-							if (!to.getType().isAir()) {
-								to = b.getRelative(0, 1, 0);
-								if (!to.getType().isAir()) {
-									continue;
-								}
-							}
-							boolean found = false;
-							for (int checkDx = -1; checkDx <= 1; checkDx++)
-								for (int checkDy = -1; checkDy <= 1; checkDy++)
-									for (int checkDz = -1; checkDz <= 1; checkDz++)
-									{
-										if (checkDx * checkDy * checkDz == 0 && (checkDx | checkDy | checkDz) != 0)
-										{
-											Block check = to.getRelative(checkDx, checkDy, checkDz);
-											if (check != b && check.getType() == Material.CRAFTING_TABLE)
-											{
-												found = true;
-												break;
-											}
-										}
-									}
-							if (found)
-							{
-								//System.out.println("Move " + b + " to " + to);
-								b.setType(Material.AIR);
-								to.setType(Material.CRAFTING_TABLE);
-							}
-						}
-					}
-				}
-			}
-
-			while (!blocksToGrow.isEmpty())
-			{
-				Vector3i to = blocksToGrow.remove();
-				if (loadedChunks.contains((((long) to.z >> 4) << 32) + (to.x >> 4)))
-				{
-					Block toBlock = w.getBlockAt(to.x, to.y, to.z);
-					Material toMaterial = toBlock.getType();
-					if (!toMaterial.isAir() && toMaterial != Material.CRAFTING_TABLE && toMaterial != Material.BEDROCK)
-						blocksToSet.add(to);
-				}
-			}
-			
-			while (!blocksToSet.isEmpty())
-			{
-				Vector3i to = blocksToSet.remove();
-				Block toBlock = w.getBlockAt(to.x, to.y, to.z);
-				toBlock.setType(Material.CRAFTING_TABLE);
-			}
 			loadedChunks.clear();
 		}
+		if (isMoving)
+			huntBlocks();
+		
 		chunkTicks++;
 	}
 	
+	private void huntBlocks()
+	{
+		//update targets(move)
+		//search new targets
+		//stretch
+		for (StretchTarget target : targets)
+		{
+			stretch(target);
+		}
+	}
+	
+	private void stretch(StretchTarget target)
+	{
+		Vector3i source = target.getPos();
+		final int TOTAL_MOVES = 16;
+		for (int m = 0; m < TOTAL_MOVES; m++)
+		{
+			int rx = random.nextInt(16) - random.nextInt(16);
+			int rz = random.nextInt(16) - random.nextInt(16);
+			if (rx != 0 || rz != 0)
+			{
+				int ry = random.nextInt(16) - random.nextInt(16);
+				if (source.y + ry < 0)
+					continue;
+				int x = source.x + rx;
+				int z = source.z + rz;
+				Block b = target.getWorld().getBlockAt(x, source.y + ry, z);
+				if (b.getType() == Material.CRAFTING_TABLE)
+				{
+					int absX = Math.abs(rx);
+					int absZ = Math.abs(rz);
+					int d = absX + absZ;
+					int dx, dz;
+					if (random.nextInt(d) < absX) {
+						dx = -rx / absX;
+						dz = 0;
+					} else {
+						dx = 0;
+						dz = -rz / absZ;
+					}
+					Block to = b.getRelative(dx, 0, dz);
+					if (!to.getType().isAir()) {
+						to = b.getRelative(0, 1, 0);
+						if (!to.getType().isAir()) {
+							continue;
+						}
+					}
+					boolean found = false;
+					for (int checkDx = -1; checkDx <= 1; checkDx++)
+						for (int checkDy = -1; checkDy <= 1; checkDy++)
+							for (int checkDz = -1; checkDz <= 1; checkDz++)
+							{
+								if (checkDx * checkDy * checkDz == 0 && (checkDx | checkDy | checkDz) != 0)
+								{
+									Block check = to.getRelative(checkDx, checkDy, checkDz);
+									if (check != b && check.getType() == Material.CRAFTING_TABLE)
+									{
+										found = true;
+										break;
+									}
+								}
+							}
+					if (found)
+					{
+						//System.out.println("Move " + b + " to " + to);
+						b.setType(Material.AIR);
+						to.setType(Material.CRAFTING_TABLE);
+					}
+				}
+			}
+		}
+	}
+	
+	private void growWorld(World w, Set<Long> loadedChunks)
+	{
+
+		final net.minecraft.world.level.World nmsWorld = ((CraftWorld) w).getHandle();
+		final ConcurrentLinkedQueue<net.minecraft.world.level.chunk.Chunk> queue = new ConcurrentLinkedQueue<>();
+		for (Chunk c : w.getLoadedChunks())
+		{
+			queue.add(nmsWorld.getChunkAt(c.getX(), c.getZ()));
+		}
+
+		ConcurrentLinkedQueue<Vector3i> blocksToGrow = new ConcurrentLinkedQueue<>();
+		ConcurrentLinkedQueue<Vector3i> blocksToSet = new ConcurrentLinkedQueue<>();
+		
+		Thread[] threads = new Thread[Runtime.getRuntime().availableProcessors()];
+		for (int i = 0; i < threads.length; i++)
+		{
+			threads[i] = new Thread(new Runnable() {
+				@Override
+				public void run() {
+					while (true)
+					{
+						net.minecraft.world.level.chunk.Chunk c = null;
+						synchronized(queue) {
+						    if(!queue.isEmpty()) {
+						        c = queue.poll();
+						    }
+						}
+						if (c == null)
+							break;
+						else
+							tickChunkRandomly(c, nmsWorld, blocksToGrow, blocksToSet);
+					}
+				}
+			});
+			threads[i].start();
+		}
+		for (int i = 0; i < threads.length; i++)
+			try {
+				threads[i].join();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		
+		/*for (Chunk c : w.getLoadedChunks())
+		{
+			tickChunkRegularly(c, nmsWorld);
+		}*/
+		
+		while (!blocksToGrow.isEmpty())
+		{
+			Vector3i to = blocksToGrow.remove();
+			if (loadedChunks.contains((((long) to.z >> 4) << 32) + (to.x >> 4)))
+			{
+				Block toBlock = w.getBlockAt(to.x, to.y, to.z);
+				Material toMaterial = toBlock.getType();
+				if (!toMaterial.isAir() && toMaterial != Material.CRAFTING_TABLE && toMaterial != Material.BEDROCK)
+					blocksToSet.add(to);
+			}
+		}
+		
+		while (!blocksToSet.isEmpty())
+		{
+			Vector3i to = blocksToSet.remove();
+			Block toBlock = w.getBlockAt(to.x, to.y, to.z);
+			toBlock.setType(Material.CRAFTING_TABLE);
+		}
+	}
+	
 	private void tickChunkRandomly(net.minecraft.world.level.chunk.Chunk nmsChunk, net.minecraft.world.level.World nmsWorld,
-			ConcurrentLinkedQueue<Vector3i> blocksToGrow, ConcurrentLinkedQueue<Vector3i> blocksToSet, ConcurrentLinkedQueue<Vector3i[]> targetsSources)
+			ConcurrentLinkedQueue<Vector3i> blocksToGrow, ConcurrentLinkedQueue<Vector3i> blocksToSet)
 	{
 	    net.minecraft.world.level.chunk.ChunkSection[] chunksections = nmsChunk.getSections();
 	    int baseZ = ((int) (nmsChunk.getPos().pair() >> 32)) << 4;
@@ -225,9 +245,6 @@ public class RandomTicker {
 				
 				if (ibd == WORKBENCH_DATA)
 				{
-					if (!isGrowing)
-						continue;
-					
 					y += section.getYPosition();
 					int dir = random.nextInt(6);
 					
@@ -264,38 +281,6 @@ public class RandomTicker {
 						//System.out.println(baseX + " " + baseZ + " " + nmsChunkTo);
 						blocksToSet.add(new Vector3i(baseX + x, y, baseZ + z));
 					}
-				}
-				else if (isMoving && ibd != BEDROCK_DATA && !ibd.isAir())
-				{
-					y += section.getYPosition();
-					// check no workbenches nearby
-					boolean foundWorkbench = false;
-					while (true)
-					{
-						if (y <= 0)
-							break;
-						y--;
-						BlockPosition bp = new BlockPosition(x, y, z);
-						ibd = nmsChunk.getType(bp);
-						if (ibd.isAir() || ibd == BEDROCK_DATA)
-							break;
-						if (ibd == WORKBENCH_DATA) {
-							foundWorkbench = true;
-							break;
-						}
-					}
-					if (foundWorkbench)
-						continue;
-					
-					Vector3i target = new Vector3i(baseX + x, y, baseZ + z);
-					while (ibd.isAir() && y > 0)
-					{
-						y--;
-						BlockPosition bp = new BlockPosition(x, y, z);
-						ibd = nmsChunk.getType(bp);
-					}
-					
-					targetsSources.add(new Vector3i[] { target, new Vector3i(baseX + x, y, baseZ + z)});
 				}
 			}
 		}

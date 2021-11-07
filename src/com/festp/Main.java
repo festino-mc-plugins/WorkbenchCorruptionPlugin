@@ -12,7 +12,7 @@ public class Main extends JavaPlugin implements Listener
 	private static final String SEP = System.getProperty("file.separator");
 	public static final String PATH = "plugins" + SEP + "WorkbenchCorruption" + SEP;
 
-	PhaseFeature[] features0 = new PhaseFeature[] {PhaseFeature.HUNT_STRETCHING};
+	PhaseFeature[] features0 = new PhaseFeature[] {PhaseFeature.REPLACE_MOB, PhaseFeature.REPLACE_PLAYER};
 	PhaseFeature[] features1 = new PhaseFeature[] {PhaseFeature.GROWTH};
 	PhaseFeature[] features2 = new PhaseFeature[] {PhaseFeature.GROWTH, PhaseFeature.ENDERMAN, PhaseFeature.REPLACE_MOB, PhaseFeature.CHUNK_PREINFECTION};
 	PhaseFeature[] features3 = new PhaseFeature[] {PhaseFeature.GROWTH, PhaseFeature.ENDERMAN, PhaseFeature.REPLACE_MOB, PhaseFeature.CHUNK_PREINFECTION,

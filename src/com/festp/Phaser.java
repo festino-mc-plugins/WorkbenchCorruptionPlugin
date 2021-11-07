@@ -35,6 +35,7 @@ public class Phaser implements Listener {
 	double baseTickspeed = 3;
 	double tickSupply = 0;
 	RandomTicker randomTicker = new RandomTicker();
+	EntityInfector infector = new EntityInfector();
 
 	Phase[] phases;
 	long phaseTicks = 0;
@@ -71,7 +72,7 @@ public class Phaser implements Listener {
 		if (!enabled)
 			return;
 		
-		populateNewChunks(2);
+		populateNewChunks(4);
 		
 		double actual = getActualTickspeed();
 		tickSupply += actual;
@@ -134,17 +135,32 @@ public class Phaser implements Listener {
 
 		if (features.containsKey(PhaseFeature.REPLACE_MOB))
 		{
+			if (random.nextInt(16) == 0)
+			{
+				infector.replaceMobItems();
+			}
+		}
+		if (features.containsKey(PhaseFeature.REPLACE_PLAYER))
+		{
+			if (random.nextInt(256) == 0) // 16 => half per 30s
+			{
+				infector.replacePlayerItems();
+			}
+		}
+		
+		if (features.containsKey(PhaseFeature.INFECT_PLAYER))
+		{
 			// TODO
 			if (random.nextInt(16) == 0)
 			{
-				// get mob(s)
-				// check item slot(including containers like donkey)
+				// get player
+				// check delay???
 				// choose item slot
 				// check workbench touching
 				// replace
 			}
 		}
-		if (features.containsKey(PhaseFeature.REPLACE_PLAYER))
+		if (features.containsKey(PhaseFeature.EXECUTE_PLAYER))
 		{
 			if (random.nextInt(16) == 0)
 			{
@@ -155,7 +171,6 @@ public class Phaser implements Listener {
 				// replace
 			}
 		}
-		
 			
 		phaseTicks++;
 		if (phaseTicks > currentPhase.getDuration())
