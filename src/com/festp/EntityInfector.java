@@ -44,9 +44,6 @@ public class EntityInfector {
 						int r = random.nextInt(N);
 						if (r < EQUIPMENT_SLOTS_COUNT) {
 							EntityEquipment eq = ((LivingEntity) e).getEquipment();
-							/*ItemStack[] equipment = eq.getArmorContents();
-							replace(equipment, r - (N - EQUIPMENT_SLOTS_COUNT));
-							eq.setArmorContents(equipment);*/
 							EquipmentSlot eqSlot = EquipmentSlot.values()[r];
 							eq.setItem(eqSlot, tryReplace(eq.getItem(eqSlot)));
 						}
@@ -56,9 +53,12 @@ public class EntityInfector {
 						}
 					}
 				}
-				else if (isTouchingWorkbench(e))
+				else if (e instanceof InventoryHolder)
 				{
-					replaceItemRandomly((InventoryHolder) e);
+					if (isTouchingWorkbench(e))
+					{
+						replaceItemRandomly((InventoryHolder) e);
+					}
 				}
 			}
 		}
