@@ -13,11 +13,16 @@ import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 public class EntityInfector {
 	private Random random = new Random();
 	private static final int N = 100; // >= max eq+inv slots
 	private static final int EQUIPMENT_SLOTS_COUNT = EquipmentSlot.values().length;
+	private static final PotionEffectType INFECTED_EFFECT = PotionEffectType.UNLUCK;
+	private static final int INFECTION_DURATION_LVL2 = 20 * 60 * 5;
+	private static final int DURATION_INCREASING = 3;
 	
 	public EntityInfector()
 	{
@@ -39,6 +44,8 @@ public class EntityInfector {
 			{
 				if (e instanceof LivingEntity)
 				{
+					if (e instanceof Player)
+						continue;
 					if (isTouchingWorkbench(e))
 					{
 						int r = random.nextInt(N);
@@ -64,14 +71,37 @@ public class EntityInfector {
 		}
 	}
 	
-	public void replacePlayerItems()
+	public void replacePlayerItems(boolean onlyInfected)
 	{
 		for (Player p : Bukkit.getOnlinePlayers())
 		{
-			// check delay???
+			if (onlyInfected && (!p.hasPotionEffect(INFECTED_EFFECT) || p.getPotionEffect(INFECTED_EFFECT).getAmplifier() < 1))
+				continue;
+			
 			if (isTouchingWorkbench(p))
 			{
 				replaceItemRandomly(p);
+			}
+		}
+	}
+
+	public void infectPlayers() {
+		for (Player p : Bukkit.getOnlinePlayers())
+		{
+			if (isTouchingWorkbench(p))
+			{
+				if (!p.hasPotionEffect(INFECTED_EFFECT))
+				{
+					p.addPotionEffect(new PotionEffect(INFECTED_EFFECT, DURATION_INCREASING, 0, true, true));
+				}
+				else
+				{
+					int dur = p.getPotionEffect(INFECTED_EFFECT).getDuration() + DURATION_INCREASING; // TODO set deeper on second(reduce timer flickering)
+					int lvl = 0;
+					if (dur >= INFECTION_DURATION_LVL2)
+						lvl = 1;
+					p.addPotionEffect(new PotionEffect(INFECTED_EFFECT, dur, lvl, true, true));
+				}
 			}
 		}
 	}

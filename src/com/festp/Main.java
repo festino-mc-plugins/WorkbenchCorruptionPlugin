@@ -12,11 +12,11 @@ public class Main extends JavaPlugin implements Listener
 	private static final String SEP = System.getProperty("file.separator");
 	public static final String PATH = "plugins" + SEP + "WorkbenchCorruption" + SEP;
 
-	PhaseFeature[] features0 = new PhaseFeature[] {PhaseFeature.REPLACE_MOB, PhaseFeature.REPLACE_PLAYER};
+	PhaseFeature[] features0 = new PhaseFeature[] {PhaseFeature.REPLACE_MOB, PhaseFeature.REPLACE_PLAYER, PhaseFeature.INFECT_PLAYER, PhaseFeature.EXECUTE_PLAYER};
 	PhaseFeature[] features1 = new PhaseFeature[] {PhaseFeature.GROWTH};
 	PhaseFeature[] features2 = new PhaseFeature[] {PhaseFeature.GROWTH, PhaseFeature.ENDERMAN, PhaseFeature.REPLACE_MOB, PhaseFeature.CHUNK_PREINFECTION};
 	PhaseFeature[] features3 = new PhaseFeature[] {PhaseFeature.GROWTH, PhaseFeature.ENDERMAN, PhaseFeature.REPLACE_MOB, PhaseFeature.CHUNK_PREINFECTION,
-			PhaseFeature.REPLACE_PLAYER, PhaseFeature.HUNT_STRETCHING, PhaseFeature.INFECT_PLAYER, PhaseFeature.EXECUTE_PLAYER};
+			PhaseFeature.HUNT_STRETCHING, PhaseFeature.REPLACE_PLAYER, PhaseFeature.INFECT_PLAYER, PhaseFeature.EXECUTE_PLAYER};
 	Phase phase0 = new LinearPhase(features0, Integer.MAX_VALUE, 1.0, 1.0);
 	Phase phase1 = new LinearPhase(features1, 24 * 60 * 60 * 20, 1.0, 50.0);
 	Phase phase2 = new LinearPhase(features1, 24 * 60 * 60 * 20, 50.0, 50.0);

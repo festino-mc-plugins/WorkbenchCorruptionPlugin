@@ -144,31 +144,20 @@ public class Phaser implements Listener {
 		{
 			if (random.nextInt(256) == 0) // 16 => half per 30s
 			{
-				infector.replacePlayerItems();
+				infector.replacePlayerItems(true);
 			}
 		}
 		
 		if (features.containsKey(PhaseFeature.INFECT_PLAYER))
 		{
-			// TODO
-			if (random.nextInt(16) == 0)
-			{
-				// get player
-				// check delay???
-				// choose item slot
-				// check workbench touching
-				// replace
-			}
+			infector.infectPlayers();
 		}
 		if (features.containsKey(PhaseFeature.EXECUTE_PLAYER))
 		{
+			// TODO
 			if (random.nextInt(16) == 0)
 			{
-				// get player
-				// check delay???
-				// choose item slot
-				// check workbench touching
-				// replace
+				//
 			}
 		}
 			
