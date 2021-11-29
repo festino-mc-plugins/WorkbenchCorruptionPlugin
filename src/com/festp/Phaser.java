@@ -273,7 +273,7 @@ public class Phaser implements Listener {
 
 	public int getStretchingTargetCount(World world) {
 		int res = 0;
-		for (Entry<World, Map<Long, List<StretchTarget>>> worldTargets : randomTicker.allTargets.entrySet())
+		for (Entry<World, Map<Long, List<StretchTarget>>> worldTargets : randomTicker.hunter.allTargets.entrySet())
 		{
 			if (worldTargets.getKey() != world)
 				continue;
@@ -284,7 +284,7 @@ public class Phaser implements Listener {
 	}
 
 	public List<StretchTarget> getStretchingTargets(Chunk c) {
-		for (Entry<World, Map<Long, List<StretchTarget>>> worldTargets : randomTicker.allTargets.entrySet())
+		for (Entry<World, Map<Long, List<StretchTarget>>> worldTargets : randomTicker.hunter.allTargets.entrySet())
 		{
 			if (worldTargets.getKey() != c.getWorld())
 				continue;
