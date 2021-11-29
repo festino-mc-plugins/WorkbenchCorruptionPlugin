@@ -22,7 +22,8 @@ public class EntityInfector {
 	private static final int EQUIPMENT_SLOTS_COUNT = EquipmentSlot.values().length;
 	private static final PotionEffectType INFECTED_EFFECT = PotionEffectType.UNLUCK;
 	private static final int INFECTION_DURATION_LVL2 = 20 * 60 * 5;
-	private static final int DURATION_INCREASING = 3;
+	private static final int DURATION_INCREASING = 2;
+	private static final int ANTIFLICKERING_TICKS_THRESHOLD = 6;
 	
 	public EntityInfector()
 	{
@@ -96,7 +97,9 @@ public class EntityInfector {
 				}
 				else
 				{
-					int dur = p.getPotionEffect(INFECTED_EFFECT).getDuration() + DURATION_INCREASING; // TODO set deeper on second(reduce timer flickering)
+					int dur = p.getPotionEffect(INFECTED_EFFECT).getDuration() + DURATION_INCREASING;
+					if (dur % 20 < ANTIFLICKERING_TICKS_THRESHOLD)
+						dur = dur - dur % 20 + ANTIFLICKERING_TICKS_THRESHOLD;
 					int lvl = 0;
 					if (dur >= INFECTION_DURATION_LVL2)
 						lvl = 1;
