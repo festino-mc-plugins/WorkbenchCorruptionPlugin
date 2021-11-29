@@ -75,7 +75,7 @@ public class EntityInfector {
 	{
 		for (Player p : Bukkit.getOnlinePlayers())
 		{
-			if (onlyInfected && (!p.hasPotionEffect(INFECTED_EFFECT) || p.getPotionEffect(INFECTED_EFFECT).getAmplifier() < 1))
+			if (onlyInfected && isInfected(p))
 				continue;
 			
 			if (isTouchingWorkbench(p))
@@ -104,6 +104,11 @@ public class EntityInfector {
 				}
 			}
 		}
+	}
+	
+	public boolean isInfected(Player p)
+	{
+		return !p.hasPotionEffect(INFECTED_EFFECT) || p.getPotionEffect(INFECTED_EFFECT).getAmplifier() < 1;
 	}
 	
 	private boolean isTouchingWorkbench(Entity e)
