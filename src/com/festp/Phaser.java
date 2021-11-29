@@ -3,10 +3,13 @@ package com.festp;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Random;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -266,5 +269,29 @@ public class Phaser implements Listener {
 				}
 			}
 		}
+	}
+
+	public int getStretchingTargetCount(World world) {
+		int res = 0;
+		for (Entry<World, Map<Long, List<StretchTarget>>> worldTargets : randomTicker.allTargets.entrySet())
+		{
+			if (worldTargets.getKey() != world)
+				continue;
+			for (List<StretchTarget> targets : worldTargets.getValue().values())
+				res += targets.size();
+		}
+		return res;
+	}
+
+	public List<StretchTarget> getStretchingTargets(Chunk c) {
+		for (Entry<World, Map<Long, List<StretchTarget>>> worldTargets : randomTicker.allTargets.entrySet())
+		{
+			if (worldTargets.getKey() != c.getWorld())
+				continue;
+			if (!worldTargets.getValue().containsKey(Utils.chunkToLong(c)))
+				return null;
+			return worldTargets.getValue().get(Utils.chunkToLong(c));
+		}
+		return null;
 	}
 }

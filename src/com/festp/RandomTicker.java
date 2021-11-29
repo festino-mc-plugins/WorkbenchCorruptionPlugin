@@ -2,8 +2,11 @@ package com.festp;
 
 import java.util.Random;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -13,6 +16,7 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.World.Environment;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.craftbukkit.v1_17_R1.CraftWorld; // TODO use reflection
 import org.bukkit.craftbukkit.v1_17_R1.util.CraftMagicNumbers;
 
@@ -26,20 +30,32 @@ public class RandomTicker {
 	//private int[] chunkTicks;
 	private int chunkTicks;
 	private int randomSectionTicks = 3;
-	private int regularChunkTicks = 1;
+	private int regularChunkTicks = 0;
+	private final static int MAX_CHUNK_TARGETS = 6;
+	private final static int MELEE_MOVES = 16;
+	private final static int FAR_MOVES = 16;
 
-	List<StretchTarget> targets = new ArrayList<>();
+	Map<World, Map<Long, List<StretchTarget>>> allTargets = new HashMap<>();
 	
 	private boolean isGrowing = false, isMoving = false;
 	
 	public RandomTicker()
 	{
-		//chunkTicks = new int[1]; // TODO remember all chunks
+		//chunkTicks = new int[1]; // TODO remember all chunks for regular ticks
 		chunkTicks = 0;
 		random = new Random();
 		rSeed = random.nextInt();
 		WORKBENCH_DATA = CraftMagicNumbers.getBlock(Material.CRAFTING_TABLE, (byte) 0);
 		BEDROCK_DATA = CraftMagicNumbers.getBlock(Material.BEDROCK, (byte) 0);
+	}
+	
+	private void tryAddWorlds()
+	{
+		for (World w : Bukkit.getWorlds())
+		{
+			if (!allTargets.containsKey(w))
+				allTargets.put(w, new HashMap<>());
+		}
 	}
 	
 	public void setRandomSectionTicks(int rts)
@@ -53,9 +69,9 @@ public class RandomTicker {
 		this.isMoving = isMoving;
 	}
 	
-	// use method #2 from https://www.spigotmc.org/threads/methods-for-changing-massive-amount-of-blocks-up-to-14m-blocks-s.395868/
 	public void tick()
 	{
+		tryAddWorlds();
 		for (World w : Bukkit.getWorlds())
 		{
 			if (w.getEnvironment() == Environment.THE_END /*&& isEndDisabled*/)
@@ -63,46 +79,132 @@ public class RandomTicker {
 
 			Set<Long> loadedChunks = new HashSet<>();
 			for (Chunk c : w.getLoadedChunks())
-				loadedChunks.add( (((long) c.getZ()) << 32) + c.getX());
+				loadedChunks.add(Utils.chunkToLong(c.getX(), c.getZ()));
 			
 			if (isGrowing)
 				growWorld(w, loadedChunks);
 
+			if (isMoving)
+				huntBlocks(w, loadedChunks);
+			
 			loadedChunks.clear();
 		}
-		if (isMoving)
-			huntBlocks();
 		
 		chunkTicks++;
 	}
 	
-	private void huntBlocks()
+	private void huntBlocks(World w, Set<Long> loadedChunks)
 	{
+		Map<Long, List<StretchTarget>> worldTargets = allTargets.get(w);
 		//update targets(move)
-		//search new targets
-		//stretch
-		for (StretchTarget target : targets)
+		List<Long> removed = new ArrayList<>();
+		for (Entry<Long, List<StretchTarget>> entry : worldTargets.entrySet())
 		{
-			stretch(target);
+			//if (!Utils.isChunkLoaded(w, entry.getKey()))
+			if (!loadedChunks.contains(entry.getKey()))
+			{
+				removed.add(entry.getKey());
+				continue;
+			}
+			
+			List<StretchTarget> targets = entry.getValue();
+			for (int i = targets.size() - 1; i >= 0; i--)
+			{
+				StretchTarget target = targets.get(i);
+				Block block = target.getBlock();
+				
+				Material m = block.getType();
+				if (!isGrowable(m))
+				{
+					targets.remove(i);
+					if (m == Material.CRAFTING_TABLE)
+						break;
+					Vector3i[] directions = new Vector3i[] {
+							new Vector3i(1, 0, 0), new Vector3i(-1, 0, 0), new Vector3i(0, 0, 1), new Vector3i(0, 0, -1), new Vector3i(0, 1, 0), new Vector3i(0, -1, 0)
+					};
+					Utils.shuffleArray(directions);
+					for (Vector3i dir : directions)
+					{
+						Block newTarget = block.getRelative(dir.x, dir.y, dir.z);
+						if (!canAddTarget(worldTargets, newTarget))
+							continue;
+						
+						m = newTarget.getType();
+						if (!isGrowable(m))
+							continue;
+						addTarget(worldTargets, new StretchTarget(newTarget));
+						break;
+					}
+				}
+			}
+		}
+		for (Long l : removed)
+		{
+			worldTargets.remove(l);
+		}
+		
+		//search new targets
+		for (Long l : loadedChunks)
+		{
+			if (!isEmpty(worldTargets, l)) // max 1 random target
+				continue;
+			
+			for (int i = 0; i < randomSectionTicks; i++)
+			{
+				int x = random.nextInt(16);
+				int z = random.nextInt(16);
+				int y = w.getMinHeight() + random.nextInt(w.getMaxHeight() - w.getMinHeight());
+				Block b = Utils.longToChunk(w, l).getBlock(x, y, z);
+				if (isGrowable(b.getType()))
+				{
+					boolean foundWorkbench = false;
+					while (b.getY() > w.getMinHeight())
+					{
+						b = b.getRelative(BlockFace.DOWN);
+						Material m = b.getType();
+						if (m.isAir() || m == Material.BEDROCK)
+							break;
+						if (m == Material.CRAFTING_TABLE) {
+							foundWorkbench = true;
+							break;
+						}
+					}
+					if (foundWorkbench)
+						continue;
+					b = b.getRelative(BlockFace.UP);
+					
+					addTarget(worldTargets, new StretchTarget(b));
+					break;
+				}
+			}
+		}
+		
+		//stretch
+		for (List<StretchTarget> targets : worldTargets.values())
+		{
+			for (StretchTarget target : targets)
+			{
+				stretch(target);
+			}
 		}
 	}
 	
 	private void stretch(StretchTarget target)
 	{
-		Vector3i source = target.getPos();
-		final int TOTAL_MOVES = 16;
-		for (int m = 0; m < TOTAL_MOVES; m++)
+		Vector3i targetPos = target.getPos();
+		for (int m = 0; m < MELEE_MOVES; m++)
 		{
-			int rx = random.nextInt(16) - random.nextInt(16);
-			int rz = random.nextInt(16) - random.nextInt(16);
+			int rx = random.nextInt(8) - random.nextInt(8);
+			int rz = random.nextInt(8) - random.nextInt(8);
 			if (rx != 0 || rz != 0)
 			{
-				int ry = random.nextInt(16) - random.nextInt(16);
-				if (source.y + ry < 0)
+				int ry = random.nextInt(target.getPos().y - target.getBottomY());
+				int y = targetPos.y - ry;
+				if (y < target.getWorld().getMinHeight())
 					continue;
-				int x = source.x + rx;
-				int z = source.z + rz;
-				Block b = target.getWorld().getBlockAt(x, source.y + ry, z);
+				int x = targetPos.x + rx;
+				int z = targetPos.z + rz;
+				Block b = target.getWorld().getBlockAt(x, y, z);
 				if (b.getType() == Material.CRAFTING_TABLE)
 				{
 					int absX = Math.abs(rx);
@@ -148,7 +250,7 @@ public class RandomTicker {
 			}
 		}
 	}
-	
+
 	private void growWorld(World w, Set<Long> loadedChunks)
 	{
 
@@ -192,19 +294,22 @@ public class RandomTicker {
 				e.printStackTrace();
 			}
 		
-		/*for (Chunk c : w.getLoadedChunks())
+		if (regularChunkTicks > 0)
 		{
-			tickChunkRegularly(c, nmsWorld);
-		}*/
+			for (Chunk c : w.getLoadedChunks())
+			{
+				tickChunkRegularly(c, nmsWorld);
+			}
+		}
 		
 		while (!blocksToGrow.isEmpty())
 		{
 			Vector3i to = blocksToGrow.remove();
-			if (loadedChunks.contains((((long) to.z >> 4) << 32) + (to.x >> 4)))
+			if (loadedChunks.contains(Utils.worldToLong(to.x, to.z)))
 			{
 				Block toBlock = w.getBlockAt(to.x, to.y, to.z);
 				Material toMaterial = toBlock.getType();
-				if (!toMaterial.isAir() && toMaterial != Material.CRAFTING_TABLE && toMaterial != Material.BEDROCK)
+				if (isGrowable(toMaterial))
 					blocksToSet.add(to);
 			}
 		}
@@ -216,13 +321,14 @@ public class RandomTicker {
 			toBlock.setType(Material.CRAFTING_TABLE);
 		}
 	}
-	
+
+	// use method #2 from https://www.spigotmc.org/threads/methods-for-changing-massive-amount-of-blocks-up-to-14m-blocks-s.395868/
 	private void tickChunkRandomly(net.minecraft.world.level.chunk.Chunk nmsChunk, net.minecraft.world.level.World nmsWorld,
 			ConcurrentLinkedQueue<Vector3i> blocksToGrow, ConcurrentLinkedQueue<Vector3i> blocksToSet)
 	{
 	    net.minecraft.world.level.chunk.ChunkSection[] chunksections = nmsChunk.getSections();
-	    int baseZ = ((int) (nmsChunk.getPos().pair() >> 32)) << 4;
-	    int baseX = ((int) nmsChunk.getPos().pair()) << 4;
+	    int baseZ = Utils.getChunkZ(nmsChunk.getPos().pair()) << 4;
+	    int baseX = Utils.getChunkX(nmsChunk.getPos().pair()) << 4;
 		for (int sectionIndex = 0; sectionIndex < nmsWorld.getSectionsCount(); sectionIndex++)
 		{
 			net.minecraft.world.level.chunk.ChunkSection section = chunksections[sectionIndex];
@@ -329,5 +435,29 @@ public class RandomTicker {
 					to.setType(Material.CRAFTING_TABLE);
 			}
 		}
+	}
+	
+	private void addTarget(Map<Long, List<StretchTarget>> worldTargets, StretchTarget target)
+	{
+		long l = Utils.chunkToLong(target.getBlock().getChunk());
+		if (!worldTargets.containsKey(l))
+			worldTargets.put(l, new ArrayList<>());
+		worldTargets.get(l).add(target);
+	}
+	
+	private boolean isEmpty(Map<Long, List<StretchTarget>> worldTargets, Long l)
+	{
+		return !worldTargets.containsKey(l) || worldTargets.get(l).size() == 0;
+	}
+	
+	private boolean canAddTarget(Map<Long, List<StretchTarget>> worldTargets, Block newTarget)
+	{
+		Long l = Utils.chunkToLong(newTarget.getChunk());
+		return !worldTargets.containsKey(l) || worldTargets.get(l).size() < MAX_CHUNK_TARGETS;
+	}
+	
+	private static boolean isGrowable(Material m)
+	{
+		return !(m.isAir() || m == Material.CRAFTING_TABLE || m == Material.BEDROCK);
 	}
 }

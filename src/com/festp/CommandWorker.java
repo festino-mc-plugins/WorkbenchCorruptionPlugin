@@ -8,6 +8,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.entity.Player;
 
 public class CommandWorker implements CommandExecutor, TabCompleter {
 	public static final String MAIN_COMMAND = "event";
@@ -45,8 +46,37 @@ public class CommandWorker implements CommandExecutor, TabCompleter {
 			}
 		}
 		if (args[0].equalsIgnoreCase("metrics")) {
-			double avg = metrics.getAverageTickSec();
-			sender.sendMessage(ChatColor.GREEN + "Base tickspeed: " + String.format("%.6f", avg) + "s (" + String.format("%.2f", avg * 20 * 100) + "% of tick)");
+			if (args.length == 1)
+			{
+				double avg = metrics.getAverageTickSec();
+				sender.sendMessage(ChatColor.GREEN + "Base tickspeed: " + String.format("%.6f", avg) + "s (" + String.format("%.2f", avg * 20 * 100) + "% of tick)");
+			}
+			else
+			{
+				if (args[1].equalsIgnoreCase("stretching")) {
+					Player p = (Player)sender;
+					int stretching = phaser.getStretchingTargetCount(p.getWorld());
+					int loaded = p.getWorld().getLoadedChunks().length;
+					sender.sendMessage(ChatColor.GREEN + "Stretching targets: " + stretching + " (" + String.format("%.2f", stretching * 100.0 / loaded) + "% of loaded)");
+					List<StretchTarget> targets = phaser.getStretchingTargets(p.getLocation().getChunk());
+					if (targets == null || targets.size() == 0)
+					{
+						sender.sendMessage(ChatColor.GREEN + "No targets in chunk ");
+					}
+					else
+					{
+						String info = "";
+						for (StretchTarget target : targets)
+						{
+							if (!info.isEmpty())
+								info += ", ";
+							info += "(" + target.getBlock().getX() + ", " + target.getBlock().getY() + ", " + target.getBlock().getZ() + ")";
+							info += " {BottomY: " + target.getBottomY() + "}";
+						}
+						sender.sendMessage(ChatColor.GREEN + "" + targets.size() + " targets in chunk: " + info);
+					}
+				}
+			}
 		}
 		if (args[0].equalsIgnoreCase("testspeed")) {
 			int N = Integer.parseInt(args[1]);
@@ -156,6 +186,9 @@ public class CommandWorker implements CommandExecutor, TabCompleter {
 				options.add("time"); // table
 				options.add("0");
 				options.add("1");
+			}
+			if (args[0].equalsIgnoreCase("metrics")) {
+				options.add("stretching");
 			}
 		}
 		if (args.length >= 3) {

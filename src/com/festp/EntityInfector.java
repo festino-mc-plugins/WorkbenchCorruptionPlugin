@@ -23,7 +23,7 @@ public class EntityInfector {
 	private static final PotionEffectType INFECTED_EFFECT = PotionEffectType.UNLUCK;
 	private static final int INFECTION_DURATION_LVL2 = 20 * 60 * 5;
 	private static final int DURATION_INCREASING = 2;
-	private static final int ANTIFLICKERING_TICKS_THRESHOLD = 6;
+	private static final int ANTIFLICKERING_TICKS_THRESHOLD = 7;
 	
 	public EntityInfector()
 	{
