@@ -103,6 +103,7 @@ public class RandomTicker {
 		Map<Long, List<StretchTarget>> worldTargets = allTargets.get(w);
 		//update targets(move)
 		List<Long> removed = new ArrayList<>();
+		List<Block> moved = new ArrayList<>();
 		for (Entry<Long, List<StretchTarget>> entry : worldTargets.entrySet())
 		{
 			if (!loadedChunks.contains(entry.getKey()))
@@ -138,8 +139,8 @@ public class RandomTicker {
 						m = newTarget.getType();
 						if (!isGrowable(m))
 							continue;
-						//System.out.println(newTarget);
-						addTarget(worldTargets, new StretchTarget(newTarget));
+						
+						moved.add(newTarget);
 						break;
 					}
 				}
@@ -148,6 +149,10 @@ public class RandomTicker {
 		for (Long l : removed)
 		{
 			worldTargets.remove(l);
+		}
+		for (Block newTarget : moved)
+		{
+			addTarget(worldTargets, new StretchTarget(newTarget));
 		}
 		
 		//search new targets
