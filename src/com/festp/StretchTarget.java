@@ -76,8 +76,11 @@ public class StretchTarget {
 					dz = vz * (-vz + 1) / 2;
 				dx *= BOTTOM_SAMPLING_UNIT;
 				dz *= BOTTOM_SAMPLING_UNIT;
-				sumY += getBottomY(x + dx, y, z + dz);
-				sumCount++;
+				if (world.isChunkLoaded((x + dx) >> 4, (z + dz) >> 4))
+				{
+					sumY += getBottomY(x + dx, y, z + dz);
+					sumCount++;
+				}
 			}
 		}
 		bottomY = sumY / sumCount;

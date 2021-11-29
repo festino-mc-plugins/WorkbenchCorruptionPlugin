@@ -16,7 +16,8 @@ public class Utils {
 	
 	public static long chunkToLong(int x, int z)
 	{
-		return (((long) z) << 32) + x;
+		// https://github.com/Bukkit/mc-dev/blob/c1627dc9cc7505581993eb0fa15597cb36e94244/net/minecraft/server/ChunkCoordIntPair.java#L14
+		return (long) x & 0xFFFFFFFF | ((long) z & 0xFFFFFFFF) << 32;
 	}
 	
 	public static long worldToLong(int x, int z)
@@ -26,12 +27,12 @@ public class Utils {
 	
 	public static int getChunkX(long l)
 	{
-		return (int) l;
+		return (int) (l & 0xFFFFFFFF);
 	}
 	
 	public static int getChunkZ(long l)
 	{
-		return (int) (l >> 32);
+		return (int) ((l >> 32) & 0xFFFFFFFF);
 	}
 	
 	public static Chunk longToChunk(World w, long l)

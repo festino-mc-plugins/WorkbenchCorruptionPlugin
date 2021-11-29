@@ -34,6 +34,9 @@ public class RandomTicker {
 	private final static int MAX_CHUNK_TARGETS = 6;
 	private final static int MELEE_MOVES = 16;
 	private final static int FAR_MOVES = 16;
+	private final static int BOTTOM_RADIUS = 32;
+	private final static int MELEE_THICKNESS = 6;
+	private final static int FAR_THICKNESS = 6;
 
 	Map<World, Map<Long, List<StretchTarget>>> allTargets = new HashMap<>();
 	
@@ -79,10 +82,12 @@ public class RandomTicker {
 
 			Set<Long> loadedChunks = new HashSet<>();
 			for (Chunk c : w.getLoadedChunks())
-				loadedChunks.add(Utils.chunkToLong(c.getX(), c.getZ()));
+				loadedChunks.add(Utils.chunkToLong(c));
 			
 			if (isGrowing)
 				growWorld(w, loadedChunks);
+			
+			reduceLoadedChunks(loadedChunks, 1);
 
 			if (isMoving)
 				huntBlocks(w, loadedChunks);
@@ -100,7 +105,6 @@ public class RandomTicker {
 		List<Long> removed = new ArrayList<>();
 		for (Entry<Long, List<StretchTarget>> entry : worldTargets.entrySet())
 		{
-			//if (!Utils.isChunkLoaded(w, entry.getKey()))
 			if (!loadedChunks.contains(entry.getKey()))
 			{
 				removed.add(entry.getKey());
@@ -118,7 +122,7 @@ public class RandomTicker {
 				{
 					targets.remove(i);
 					if (m == Material.CRAFTING_TABLE)
-						break;
+						continue;
 					Vector3i[] directions = new Vector3i[] {
 							new Vector3i(1, 0, 0), new Vector3i(-1, 0, 0), new Vector3i(0, 0, 1), new Vector3i(0, 0, -1), new Vector3i(0, 1, 0), new Vector3i(0, -1, 0)
 					};
@@ -126,12 +130,15 @@ public class RandomTicker {
 					for (Vector3i dir : directions)
 					{
 						Block newTarget = block.getRelative(dir.x, dir.y, dir.z);
+						if (!loadedChunks.contains(Utils.worldToLong(newTarget.getX(), newTarget.getZ())))
+							continue;
 						if (!canAddTarget(worldTargets, newTarget))
 							continue;
 						
 						m = newTarget.getType();
 						if (!isGrowable(m))
 							continue;
+						//System.out.println(newTarget);
 						addTarget(worldTargets, new StretchTarget(newTarget));
 						break;
 					}
@@ -149,30 +156,25 @@ public class RandomTicker {
 			if (!isEmpty(worldTargets, l)) // max 1 random target
 				continue;
 			
-			for (int i = 0; i < randomSectionTicks; i++)
+			for (int i = 0; i < 3; i++) // random amount
 			{
+				int y = w.getMinHeight() + random.nextInt(w.getMaxHeight() - w.getMinHeight());
+				if (y == w.getMinHeight())
+					continue;
 				int x = random.nextInt(16);
 				int z = random.nextInt(16);
-				int y = w.getMinHeight() + random.nextInt(w.getMaxHeight() - w.getMinHeight());
 				Block b = Utils.longToChunk(w, l).getBlock(x, y, z);
 				if (isGrowable(b.getType()))
 				{
-					boolean foundWorkbench = false;
-					while (b.getY() > w.getMinHeight())
-					{
-						b = b.getRelative(BlockFace.DOWN);
-						Material m = b.getType();
-						if (m.isAir() || m == Material.BEDROCK)
-							break;
-						if (m == Material.CRAFTING_TABLE) {
-							foundWorkbench = true;
-							break;
-						}
-					}
-					if (foundWorkbench)
+					Block bDown = b.getRelative(BlockFace.DOWN);
+					if (!bDown.getType().isAir())
 						continue;
-					b = b.getRelative(BlockFace.UP);
-					
+
+					//if (w.getEnvironment() == Environment.NORMAL)
+					//	System.out.println(b);
+
+					//System.out.println(l + " " + Utils.worldToLong(b.getX(), b.getZ()) + " " + Utils.getChunkX(l) + " " + Utils.getChunkZ(l));
+					//System.out.println(worldTargets.containsKey(Utils.worldToLong(b.getX(), b.getZ())) ? worldTargets.get(Utils.worldToLong(b.getX(), b.getZ())).size() : "no");
 					addTarget(worldTargets, new StretchTarget(b));
 					break;
 				}
@@ -184,26 +186,30 @@ public class RandomTicker {
 		{
 			for (StretchTarget target : targets)
 			{
-				stretch(target);
+				stretch(target, loadedChunks);
 			}
 		}
 	}
 	
-	private void stretch(StretchTarget target)
+	private void stretch(StretchTarget target, Set<Long> loadedChunks)
 	{
 		Vector3i targetPos = target.getPos();
 		for (int m = 0; m < MELEE_MOVES; m++)
 		{
-			int rx = random.nextInt(8) - random.nextInt(8);
-			int rz = random.nextInt(8) - random.nextInt(8);
+			int rx = random.nextInt(MELEE_THICKNESS) - random.nextInt(MELEE_THICKNESS);
+			int rz = random.nextInt(MELEE_THICKNESS) - random.nextInt(MELEE_THICKNESS);
 			if (rx != 0 || rz != 0)
 			{
-				int ry = random.nextInt(target.getPos().y - target.getBottomY());
+				int ry = random.nextInt(target.getPos().y - target.getBottomY() + MELEE_THICKNESS * 2) - MELEE_THICKNESS;
 				int y = targetPos.y - ry;
 				if (y < target.getWorld().getMinHeight())
 					continue;
 				int x = targetPos.x + rx;
 				int z = targetPos.z + rz;
+				
+				if (!loadedChunks.contains(Utils.worldToLong(x, z)))
+					continue;
+				
 				Block b = target.getWorld().getBlockAt(x, y, z);
 				if (b.getType() == Material.CRAFTING_TABLE)
 				{
@@ -218,9 +224,13 @@ public class RandomTicker {
 						dx = 0;
 						dz = -rz / absZ;
 					}
+					
 					Block to = b.getRelative(dx, 0, dz);
 					if (!to.getType().isAir()) {
-						to = b.getRelative(0, 1, 0);
+						if (y <= targetPos.y)
+							to = b.getRelative(0, 1, 0);
+						else
+							to = b.getRelative(0, -1, 0);
 						if (!to.getType().isAir()) {
 							continue;
 						}
@@ -243,6 +253,75 @@ public class RandomTicker {
 					if (found)
 					{
 						//System.out.println("Move " + b + " to " + to);
+						b.setType(Material.AIR);
+						to.setType(Material.CRAFTING_TABLE);
+					}
+				}
+			}
+		}
+		Vector3i center = target.getBottomCenter();
+		for (int m = 0; m < FAR_MOVES; m++)
+		{
+			int rx = random.nextInt(BOTTOM_RADIUS) - random.nextInt(BOTTOM_RADIUS);
+			int rz = random.nextInt(BOTTOM_RADIUS) - random.nextInt(BOTTOM_RADIUS);
+			if (rx != 0 || rz != 0)
+			{
+				int ry = random.nextInt(FAR_THICKNESS * 2) - FAR_THICKNESS;
+				int y = center.y + FAR_THICKNESS - ry;
+				if (y < target.getWorld().getMinHeight())
+					continue;
+				int x = center.x + rx;
+				int z = center.z + rz;
+				
+				if (!loadedChunks.contains(Utils.worldToLong(x, z)))
+					continue;
+				
+				Block b = target.getWorld().getBlockAt(x, y, z);
+				if (b.getType() == Material.CRAFTING_TABLE)
+				{
+					int absX = Math.abs(rx);
+					int absZ = Math.abs(rz);
+					int d = absX + absZ;
+					int dx, dz;
+					if (random.nextInt(d) < absX) {
+						dx = -rx / absX;
+						dz = 0;
+					} else {
+						dx = 0;
+						dz = -rz / absZ;
+					}
+					
+					Block to = b.getRelative(dx, 0, dz);
+					if (!to.getType().isAir()) {
+						to = b.getRelative(0, 1, 0);
+						if (!to.getType().isAir()) {
+							continue;
+						}
+					}
+					boolean found = false;
+					for (int checkDx = -1; checkDx <= 1; checkDx++)
+						for (int checkDy = -1; checkDy <= 1; checkDy++)
+							for (int checkDz = -1; checkDz <= 1; checkDz++)
+							{
+								if (checkDx * checkDy * checkDz == 0 && (checkDx | checkDy | checkDz) != 0)
+								{
+									Block check = to.getRelative(checkDx, checkDy, checkDz);
+									if (check != b && check.getType() == Material.CRAFTING_TABLE)
+									{
+										found = true;
+										break;
+									}
+								}
+							}
+					if (!found)
+					{
+						to = b.getRelative(0, -1, 0);
+						if (to.getType().isAir()) {
+							found = true;
+						}
+					}
+					if (found)
+					{
 						b.setType(Material.AIR);
 						to.setType(Material.CRAFTING_TABLE);
 					}
@@ -459,5 +538,35 @@ public class RandomTicker {
 	private static boolean isGrowable(Material m)
 	{
 		return !(m.isAir() || m == Material.CRAFTING_TABLE || m == Material.BEDROCK);
+	}
+	
+	private void reduceLoadedChunks(Set<Long> loadedChunks, int squareRadius)
+	{
+		if (squareRadius <= 0)
+			return;
+		Map<Long, Integer> map = new HashMap<Long, Integer>();
+		for (Long l : loadedChunks)
+		{
+			int x = Utils.getChunkX(l);
+			int z = Utils.getChunkZ(l);
+			for (int i = -1; i <= 1; i++)
+			{
+				for (int j = -1; j <= 1; j++)
+				{
+					Long l2 = Utils.chunkToLong(x + i, z + j);
+					if (map.containsKey(l2))
+						map.put(l2, map.get(l2) + 1);
+					else
+						map.put(l2, 1);
+				}
+			}
+		}
+		loadedChunks.clear();
+		for (Entry<Long, Integer> entry : map.entrySet())
+		{
+			if (entry.getValue() == 9)
+				loadedChunks.add(entry.getKey());
+		}
+		reduceLoadedChunks(loadedChunks, squareRadius - 1);
 	}
 }

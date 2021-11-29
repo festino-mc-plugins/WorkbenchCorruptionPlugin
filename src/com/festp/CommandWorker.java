@@ -49,7 +49,7 @@ public class CommandWorker implements CommandExecutor, TabCompleter {
 			if (args.length == 1)
 			{
 				double avg = metrics.getAverageTickSec();
-				sender.sendMessage(ChatColor.GREEN + "Base tickspeed: " + String.format("%.6f", avg) + "s (" + String.format("%.2f", avg * 20 * 100) + "% of tick)");
+				sender.sendMessage(ChatColor.GREEN + "Time to tick: " + String.format("%.6f", avg) + "s (" + String.format("%.2f", avg * 20 * 100) + "% of tick)");
 			}
 			else
 			{
