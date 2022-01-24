@@ -69,6 +69,7 @@ public class RandomTicker {
 				growWorld(w, loadedChunks);
 			
 			reduceLoadedChunks(loadedChunks, 1); // the only reason to hunter to be here
+			reduceLoadedChunks(loadedChunks, 1); // the only reason to hunter to be here
 
 			if (isMoving)
 				hunter.huntBlocks(w, loadedChunks);
@@ -146,7 +147,7 @@ public class RandomTicker {
 		{
 			Vector3i to = blocksToSet.remove();
 			Block toBlock = w.getBlockAt(to.x, to.y, to.z);
-			toBlock.setType(Material.CRAFTING_TABLE);
+			toBlock.setType(Material.CRAFTING_TABLE); // May prevent chunk unloading !!!
 		}
 	}
 

@@ -44,6 +44,9 @@ public class StretchingHunter {
 	{
 		Map<Long, List<StretchTarget>> worldTargets = allTargets.get(w);
 		
+		if (worldTargets == null)
+			return;
+		
 		updateTargets(worldTargets, loadedChunks);
 		
 		randomNewTargets(w, worldTargets, loadedChunks);

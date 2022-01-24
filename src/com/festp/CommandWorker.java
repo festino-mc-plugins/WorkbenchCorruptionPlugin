@@ -2,6 +2,7 @@ package com.festp;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map.Entry;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -153,7 +154,57 @@ public class CommandWorker implements CommandExecutor, TabCompleter {
 			
 		}
 		if (args[0].equalsIgnoreCase("phase")) {
+			if (args.length == 1)
+			{
+				sender.sendMessage(ChatColor.RED + "Need more args");
+				return false;
+			}
 			
+			if (args[1].equalsIgnoreCase("start"))
+			{
+				if (args[2].length() > 0 && Character.isDigit(args[2].charAt(0)))
+				{
+					int phase = Integer.parseInt(args[2]);
+					if (phase >= phaser.phases.length) {
+						sender.sendMessage(ChatColor.RED + "Invalid phase number");
+						return false;
+					}
+					phaser.setPhase(phase, 0);
+					sender.sendMessage(ChatColor.GREEN + "Starting phase #" + phase);
+					return true;
+				}
+			}
+			if (args[1].equalsIgnoreCase("time"))
+			{
+				double time = phaser.phaseTicks / (double) phaser.currentPhase.getDuration();
+				sender.sendMessage(ChatColor.GREEN + "Phase #" + phaser.phaseIndex + ": " + String.format("%.2f", time * 100) + "%");
+				return true;
+			}
+			if (args[1].length() > 0 && Character.isDigit(args[1].charAt(0)))
+			{
+				int phase = Integer.parseInt(args[1]);
+				if (phase >= phaser.phases.length) {
+					sender.sendMessage(ChatColor.RED + "Invalid phase number");
+					return false;
+				}
+				sender.sendMessage(ChatColor.GREEN + "Phase #" + phase + " info:");
+				sender.sendMessage(ChatColor.GREEN + "Duration: " + String.format("%.2f", phaser.phases[phase].getDuration() / 20.0) + "s or " + String.format("%.2f", phaser.phases[phase].getDuration() / (20.0 * 60 * 60)) + "h");
+				int size = 0;
+				for (Entry<PhaseFeature, Boolean> entry : phaser.phases[phase].getFeatures().entrySet())
+					if (entry.getValue())
+						size++;
+				String[] stringFeatures = new String[size];
+				int i = 0;
+				for (Entry<PhaseFeature, Boolean> entry : phaser.phases[phase].getFeatures().entrySet())
+					if (entry.getValue())
+					{
+						stringFeatures[i] = entry.getKey().name();
+						i++;
+					}
+				String features = String.join(", ", stringFeatures);
+				sender.sendMessage(ChatColor.GREEN + "Features: " + features);
+				return true;
+			}
 		}
 		
 		return true;
@@ -199,7 +250,7 @@ public class CommandWorker implements CommandExecutor, TabCompleter {
 				}
 				if (args[1].length() == 1 && Character.isDigit(args[1].charAt(0))) {
 					int phase = Integer.parseInt(args[1]);
-					if (phase <= 3) {
+					if (phase < phaser.phases.length) {
 						if (args.length == 3) {
 							// info
 						}
